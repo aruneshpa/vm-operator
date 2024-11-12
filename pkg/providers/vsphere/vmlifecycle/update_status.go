@@ -782,6 +782,7 @@ func updateVolumeStatus(vm *vmopv1.VirtualMachine, moVM mo.VirtualMachine) {
 	}
 
 	existingDisksInConfig := map[string]struct{}{}
+	existingClassicDisksInConfig := map[string]struct{}{}
 
 	for i := range moVM.Config.Hardware.Device {
 		vd, ok := moVM.Config.Hardware.Device[i].(*vimtypes.VirtualDisk)
@@ -820,6 +821,10 @@ func updateVolumeStatus(vm *vmopv1.VirtualMachine, moVM mo.VirtualMachine) {
 
 		existingDisksInConfig[diskUUID] = struct{}{}
 
+		if !isFCD {
+			existingClassicDisksInConfig[diskUUID] = struct{}{}
+		}
+
 		ctx := context.TODO()
 
 		if diskIndex, ok := existingDisksInStatus[diskUUID]; ok {
@@ -851,8 +856,22 @@ func updateVolumeStatus(vm *vmopv1.VirtualMachine, moVM mo.VirtualMachine) {
 		func(e vmopv1.VirtualMachineVolumeStatus) bool {
 			switch e.Type {
 			case vmopv1.VirtualMachineStorageDiskTypeClassic:
+				// If a status was added when the disk was a non FCD, but is now an FCD, handle that.
+				_, isClassicDisk := existingClassicDisksInConfig[e.DiskUUID]
+				if !isClassicDisk {
+					// Status says classic disk, but it is not a classic disk as per the status, fix that.
+					return !isClassicDisk
+				}
+
+				// If the type of disk has changed since that status calculation, reset those.
+
 				_, keep := existingDisksInConfig[e.DiskUUID]
+				// Over here, if a disk was added first as a non classic disk disk, and then later converted to FCD, that disk will be in the existingDisksInConfig so it won't be removed even after it is convereted to FCD.
 				return !keep
+			case vmopv1.VirtualMachineStorageDiskTypeManaged:
+				// If Status says FCD, but the VM's disk device says it is not an FCD, remove it from Status.
+				_, isClassicDisk := existingClassicDisksInConfig[e.DiskUUID]
+				return isClassicDisk
 			default:
 				return false
 			}
