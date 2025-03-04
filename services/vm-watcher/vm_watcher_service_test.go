@@ -19,6 +19,7 @@ import (
 	"github.com/vmware/govmomi/object"
 	vimtypes "github.com/vmware/govmomi/vim25/types"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlmgr "sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -354,6 +355,194 @@ var _ = Describe(
 							},
 						},
 					})))
+				})
+
+				When("a Zone that is being deleted", func() {
+					When("the zone has the zone finalizer", func() {
+						Specify("a reconcile request should be received", func() {
+							By("verify that the zone has the finalizer added", func() {
+								Eventually(func(g Gomega) {
+									zoneList := topologyv1.ZoneList{}
+									err := vcSimCtx.Client.List(vcSimCtx, &zoneList, ctrlclient.InNamespace(vcSimCtx.NSInfo.Namespace))
+									g.Expect(err).NotTo(HaveOccurred())
+									g.Expect(zoneList.Items).ToNot(BeEmpty())
+									for _, zone := range zoneList.Items {
+										g.Expect(zone.Finalizers).To(ContainElement(zonectrl.Finalizer))
+									}
+								})
+							})
+
+							By("a reconcile request should be received", func() {
+								chanSource := cource.FromContext(ctx, "VirtualMachine")
+								var e event.GenericEvent
+								Eventually(chanSource).Should(Receive(&e, Equal(event.GenericEvent{
+									Object: &vmopv1.VirtualMachine{
+										ObjectMeta: metav1.ObjectMeta{
+											Namespace: vcSimCtx.NSInfo.Namespace,
+											Name:      vmName,
+										},
+									},
+								})))
+							})
+
+							By("add a new finalizer and mark the zone for deletion", func() {
+								zoneList := topologyv1.ZoneList{}
+								err := vcSimCtx.Client.List(vcSimCtx, &zoneList, ctrlclient.InNamespace(vcSimCtx.NSInfo.Namespace))
+								Expect(err).NotTo(HaveOccurred())
+								Expect(zoneList.Items).ToNot(BeEmpty())
+								for _, zone := range zoneList.Items {
+									// Add a finalizer to each zone.
+									controllerutil.AddFinalizer(&zone, "foo/bar")
+									Expect(vcSimCtx.Client.Update(vcSimCtx, &zone)).To(Succeed())
+
+									// Mark the zone for deletion.
+									Expect(vcSimCtx.Client.Delete(vcSimCtx, &zone)).To(Succeed())
+								}
+							})
+
+							By("reconfigure the VM", func() {
+								t, err := vm.Reconfigure(ctx, vimtypes.VirtualMachineConfigSpec{
+									ExtraConfig: []vimtypes.BaseOptionValue{
+										&vimtypes.OptionValue{
+											Key:   "guestinfo.ipaddr",
+											Value: "1.2.3.4",
+										},
+									},
+								})
+								Expect(err).ToNot(HaveOccurred())
+								Expect(t).ToNot(BeNil())
+								Expect(t.Wait(ctx)).To(Succeed())
+							})
+
+							By("a reconcile request should still be received", func() {
+								chanSource := cource.FromContext(ctx, "VirtualMachine")
+								var e event.GenericEvent
+								Eventually(chanSource).Should(Receive(&e, Equal(event.GenericEvent{
+									Object: &vmopv1.VirtualMachine{
+										ObjectMeta: metav1.ObjectMeta{
+											Namespace: vcSimCtx.NSInfo.Namespace,
+											Name:      vmName,
+										},
+									},
+								})))
+							})
+						})
+					})
+
+					FWhen("the zone does not have the finalizer", func() {
+						var oldPort string
+						Specify("a reconcile request should not be received", func() {
+							By("verify that the zone has the finalizer added", func() {
+								Eventually(func(g Gomega) {
+									zoneList := topologyv1.ZoneList{}
+									err := vcSimCtx.Client.List(vcSimCtx, &zoneList, ctrlclient.InNamespace(vcSimCtx.NSInfo.Namespace))
+									g.Expect(err).NotTo(HaveOccurred())
+									g.Expect(zoneList.Items).ToNot(BeEmpty())
+									for _, zone := range zoneList.Items {
+										g.Expect(zone.Finalizers).To(ContainElement(zonectrl.Finalizer))
+									}
+								}).Should(Succeed())
+							})
+
+							By("first reconcile event should be received", func() {
+								chanSource := cource.FromContext(ctx, "VirtualMachine")
+								var e event.GenericEvent
+								Eventually(chanSource).Should(Receive(&e, Equal(event.GenericEvent{
+									Object: &vmopv1.VirtualMachine{
+										ObjectMeta: metav1.ObjectMeta{
+											Namespace: vcSimCtx.NSInfo.Namespace,
+											Name:      vmName,
+										},
+									},
+								})))
+							})
+
+							By("add a different finalizer to the VM", func() {
+								zoneList := topologyv1.ZoneList{}
+								err := vcSimCtx.Client.List(vcSimCtx, &zoneList, ctrlclient.InNamespace(vcSimCtx.NSInfo.Namespace))
+								Expect(err).NotTo(HaveOccurred())
+								Expect(zoneList.Items).ToNot(BeEmpty())
+								for _, zone := range zoneList.Items {
+									controllerutil.AddFinalizer(&zone, "foo/bar")
+									controllerutil.RemoveFinalizer(&zone, zonectrl.Finalizer)
+									Expect(vcSimCtx.Client.Update(vcSimCtx, &zone)).To(Succeed())
+
+									Expect(vcSimCtx.Client.Delete(vcSimCtx, &zone)).To(Succeed())
+								}
+							})
+
+							By("marking the zone for deletion, and waiting for the zone finalizer to be gone", func() {
+								// Remove the zone finalizer
+								Eventually(func(g Gomega) {
+									zoneList := topologyv1.ZoneList{}
+									err := vcSimCtx.Client.List(vcSimCtx, &zoneList, ctrlclient.InNamespace(vcSimCtx.NSInfo.Namespace))
+									g.Expect(err).NotTo(HaveOccurred())
+									g.Expect(zoneList.Items).ToNot(BeEmpty())
+									for _, zone := range zoneList.Items {
+										g.Expect(zone.DeletionTimestamp).NotTo(BeZero())
+										g.Expect(zone.Finalizers).NotTo(ContainElement(zonectrl.Finalizer))
+									}
+								}).Should(Succeed())
+							})
+
+							// Reset the ports to restart the watcher.
+							By("invalidate the port", func() {
+								vsClientMu.Lock()
+								defer vsClientMu.Unlock()
+
+								oldPort = vcSimCtx.VCClientConfig.Port
+								vcSimCtx.VCClientConfig.Port = "1"
+							})
+
+							By("log out the client session", func() {
+								vsClientMu.Lock()
+								defer vsClientMu.Unlock()
+
+								vsClient.Logout(vcSimCtx)
+							})
+
+							Eventually(func(g Gomega) {
+								vsClientMu.RLock()
+								defer vsClientMu.RUnlock()
+
+								g.Expect(vsClient.Valid()).To(BeFalse())
+								g.Expect(atomic.LoadInt32(&numNewClientCalls)).To(BeNumerically(">=", int32(2)))
+							}).Should(Succeed())
+
+							By("fix the port", func() {
+								vsClientMu.Lock()
+								defer vsClientMu.Unlock()
+
+								vcSimCtx.VCClientConfig.Port = oldPort
+							})
+
+							Eventually(func(g Gomega) {
+								vsClientMu.RLock()
+								defer vsClientMu.RUnlock()
+
+								g.Expect(atomic.LoadInt32(&numNewClientCalls)).To(BeNumerically(">=", int32(3)))
+							}).Should(Succeed())
+
+							By("reconfigure the VM", func() {
+								t, err := vm.Reconfigure(ctx, vimtypes.VirtualMachineConfigSpec{
+									ExtraConfig: []vimtypes.BaseOptionValue{
+										&vimtypes.OptionValue{
+											Key:   "guestinfo.ipaddr",
+											Value: "1.2.3.4",
+										},
+									},
+								})
+								Expect(err).ToNot(HaveOccurred())
+								Expect(t).ToNot(BeNil())
+								Expect(t.Wait(ctx)).To(Succeed())
+							})
+
+							By("a reconcile should not be received", func() {
+								chanSource := cource.FromContext(ctx, "VirtualMachine")
+								Consistently(chanSource).ShouldNot(Receive())
+							})
+						})
+					})
 				})
 
 				When("a bogus Zone Folder MoID", func() {

@@ -132,6 +132,17 @@ func (s Service) vmFolderMoRefWithIDs(
 		z := zones.Items[i]
 
 		if v := z.Spec.ManagedVMs.FolderMoID; v != "" {
+
+			// If a zone is being deleted and it does not have any
+			// finalizer, the zone controller has already stopped the
+			// watcher and removed the finalizer. Or, a zone is being
+			// deleted even before a watcher could start. In either
+			// case, no need to watch this folder.
+			if !z.DeletionTimestamp.IsZero() &&
+				!controllerutil.ContainsFinalizer(&z, zonectrl.Finalizer) {
+				continue
+			}
+
 			if _, ok := moids[v]; !ok {
 				moids[v] = make([]string, 0, 1)
 
@@ -144,7 +155,10 @@ func (s Service) vmFolderMoRefWithIDs(
 			}
 			moids[v] = append(moids[v], fmt.Sprintf("%s/%s", z.Namespace, z.Name))
 
-			if !controllerutil.ContainsFinalizer(&z, zonectrl.Finalizer) {
+			// API server prevents adding finalizers to resources that
+			// are in Deleting state, so skip such zones.
+			if z.DeletionTimestamp.IsZero() &&
+				!controllerutil.ContainsFinalizer(&z, zonectrl.Finalizer) {
 				zonesWithoutFinalizer = append(zonesWithoutFinalizer, z)
 			}
 		}
