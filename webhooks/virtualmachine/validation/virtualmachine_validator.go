@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlmgr "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -473,7 +474,44 @@ func (v validator) validateClassOnCreate(
 		}
 	}
 
+	if pkgcfg.FromContext(ctx).Features.ImmutableClasses {
+		allErrs = append(allErrs, v.validateClassInstanceOnCreate(ctx, vm)...)
+	}
+
 	return allErrs
+}
+
+func (v validator) validateClassInstanceOnCreate(ctx *pkgctx.WebhookRequestContext, vm *vmopv1.VirtualMachine) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// The mutating webhook ensures that the spec.className and
+	// spec.class are both set. Verify if they are valid.
+
+	f := field.NewPath("spec", "class")
+	classInstance := &vmopv1.VirtualMachineClassInstance{}
+	if err := v.client.Get(
+		ctx,
+		client.ObjectKey{Name: vm.Spec.Class.Name, Namespace: vm.Namespace},
+		classInstance); err != nil {
+
+		return append(allErrs, field.Invalid(f.Child("name"), vm.Spec.Class.Name, "invalid class instance: can't fetch"))
+	}
+
+	// Specifying an inactive instance is disallowed.
+	if classInstance.Annotations["active"] == "false" {
+		return append(allErrs, field.Invalid(f.Child("name"), vm.Spec.Class.Name, "invalid class instance: inactive"))
+	}
+
+	// Verify that the VM class instance is owned by the class
+	// specified in spec.className.
+	for _, ownerClass := range classInstance.OwnerReferences {
+		if ownerClass.Name == vm.Spec.ClassName {
+			// A valid instance was specified.
+			return allErrs
+		}
+	}
+
+	return append(allErrs, field.Invalid(f.Child("name"), vm.Spec.Class.Name, "invalid class instance: owner class doesn't match with spec.className"))
 }
 
 func (v validator) validateClassOnUpdate(ctx *pkgctx.WebhookRequestContext, vm, oldVM *vmopv1.VirtualMachine) field.ErrorList {
@@ -503,7 +541,44 @@ func (v validator) validateClassOnUpdate(ctx *pkgctx.WebhookRequestContext, vm, 
 		}
 	}
 
+	if pkgcfg.FromContext(ctx).Features.ImmutableClasses {
+		allErrs = append(allErrs, v.validateClassInstanceOnUpdate(ctx, vm, oldVM)...)
+	}
+
 	return allErrs
+}
+
+// TODO: Imported VMs: will they have one field set, other one unset?  How is that handled in mutation?
+func (v validator) validateClassInstanceOnUpdate(ctx *pkgctx.WebhookRequestContext, vm, _ *vmopv1.VirtualMachine) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// The mutating webhook ensures that the spec.className and
+	// spec.class are both set. Verify if they are valid.
+
+	f := field.NewPath("spec", "class")
+	classInstance := &vmopv1.VirtualMachineClassInstance{}
+	if err := v.client.Get(
+		ctx,
+		client.ObjectKey{Name: vm.Spec.Class.Name, Namespace: vm.Namespace},
+		classInstance); err != nil {
+
+		return append(allErrs, field.Invalid(f.Child("name"), vm.Spec.Class.Name, "invalid class instance: can't fetch"))
+	}
+
+	// Specifying an inactive instance is disallowed.
+	if classInstance.Annotations["active"] == "false" {
+		return append(allErrs, field.Invalid(f.Child("name"), vm.Spec.Class.Name, "invalid class instance: inactive"))
+	}
+
+	for _, ownerClass := range classInstance.OwnerReferences {
+		if ownerClass.Name == vm.Spec.ClassName {
+
+			// A valid instance was specified.
+			return allErrs
+		}
+	}
+
+	return append(allErrs, field.Invalid(f.Child("name"), vm.Spec.Class.Name, "invalid class instance: owner class doesn't match with spec.className"))
 }
 
 func (v validator) validateStorageClass(
