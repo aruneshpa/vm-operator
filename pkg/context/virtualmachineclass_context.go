@@ -23,3 +23,14 @@ type VirtualMachineClassContext struct {
 func (v *VirtualMachineClassContext) String() string {
 	return fmt.Sprintf("%s %s/%s", v.VMClass.GroupVersionKind(), v.VMClass.Namespace, v.VMClass.Name)
 }
+
+// VirtualMachineClassInstanceContext is the context used for VirtualMachineClassInstanceControllers.
+type VirtualMachineClassInstanceContext struct {
+	context.Context
+	Logger          logr.Logger
+	VMClassInstance *vmopv1.VirtualMachineClassInstance
+}
+
+func (v *VirtualMachineClassInstanceContext) String() string {
+	return fmt.Sprintf("%s %s/%s", v.VMClassInstance.GroupVersionKind(), v.VMClassInstance.Namespace, v.VMClassInstance.Name)
+}
