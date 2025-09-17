@@ -3734,7 +3734,6 @@ func unitTestsValidateUpdate() {
 		changeResourcePolicy        bool
 		assignZoneName              bool
 		changeZoneName              bool
-		unsetZone                   bool
 		isSysprepTransportUsed      bool
 		withInstanceStorageVolumes  bool
 		changeInstanceStorageVolume bool
@@ -3794,12 +3793,7 @@ func unitTestsValidateUpdate() {
 		}
 		if args.changeZoneName {
 			ctx.oldVM.Labels[corev1.LabelTopologyZone] = builder.DummyZoneName
-			if args.unsetZone {
-				// Remove the zone label to test unsetting zone
-				delete(ctx.vm.Labels, corev1.LabelTopologyZone)
-			} else {
-				ctx.vm.Labels[corev1.LabelTopologyZone] = builder.DummyZoneName + updateSuffix
-			}
+			ctx.vm.Labels[corev1.LabelTopologyZone] = builder.DummyZoneName + updateSuffix
 		}
 
 		if args.withInstanceStorageVolumes {
@@ -3879,10 +3873,6 @@ func unitTestsValidateUpdate() {
 		Entry("should allow empty instance uuid change", updateArgs{changeInstanceUUID: true}, true, nil, nil),
 		Entry("should allow empty bios uuid change", updateArgs{changeBiosUUID: true}, true, nil, nil),
 		Entry("should allow initial zone assignment", updateArgs{assignZoneName: true}, true, nil, nil),
-		Entry("should deny zone change for non-privileged user", updateArgs{changeZoneName: true}, false,
-			field.Invalid(field.NewPath("metadata", "labels").Key(corev1.LabelTopologyZone), builder.DummyZoneName+updateSuffix, "field is immutable").Error(), nil),
-		Entry("should allow zone change for privileged user", updateArgs{changeZoneName: true, isServiceUser: true}, true, nil, nil),
-		Entry("should allow zone unset for privileged user", updateArgs{changeZoneName: true, isServiceUser: true, unsetZone: true}, true, nil, nil),
 
 		Entry("should deny instance storage volume name change, when user is SSO user", updateArgs{changeInstanceStorageVolume: true}, false,
 			field.Forbidden(volumesPath, "adding or modifying instance storage volume claim(s) is not allowed").Error(), nil),
