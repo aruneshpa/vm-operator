@@ -15,6 +15,21 @@ type ControllerID struct {
 	BusNumber      int32
 }
 
+const (
+	// Maximum number of SCSI controllers allowed per VM.
+	MaxSCSIControllers = int32(4)
+
+	// Maximum number of devices per SCSI controller type.
+	// Note: The controller itself occupies one slot.
+	MaxParaVirtualSCSISlots = 63 // 64 targets - 1 for controller
+	MaxBusLogicSlots        = 15 // 16 targets - 1 for controller
+	MaxLsiLogicSlots        = 15 // 16 targets - 1 for controller
+	MaxLsiLogicSASSlots     = 15 // 16 targets - 1 for controller
+
+	// Unit number reserved for SCSI controller on its own bus.
+	SCSIControllerUnitNumber = 7
+)
+
 // CNSAttachmentNameForVolume returns the name of the CnsNodeVmAttachment based
 // on the VM and Volume name.
 // This matches the naming used in previous code but there are situations where

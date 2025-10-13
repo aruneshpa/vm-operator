@@ -285,6 +285,11 @@ func (m mutator) Mutate(ctx *pkgctx.WebhookRequestContext) admission.Response {
 			if _, err := SetPVCVolumeDefaultsOnCreate(ctx, m.client, modified); err != nil {
 				return admission.Denied(err.Error())
 			}
+			// Note: Controller mutation only runs on UPDATE, not CREATE.
+			// During CREATE, the VM doesn't have status information yet,
+			// so we can't accurately determine available controller slots.
+			// The reconcileSchemaUpgrade will backfill controllers from
+			// class/image, which will trigger an UPDATE webhook call.
 		}
 
 		// Iterate over the externally registered mutate functions.
@@ -341,6 +346,15 @@ func (m mutator) Mutate(ctx *pkgctx.WebhookRequestContext) admission.Response {
 				wasMutated = true
 			}
 			if ok := CleanupApplyPowerStateChangeTimeAnno(ctx, modified, oldVM); ok {
+				wasMutated = true
+			}
+		}
+
+		if pkgcfg.FromContext(ctx).Features.VMSharedDisks {
+			// Add controllers as needed for new volumes
+			if ok, err := AddControllersForVolumes(ctx, m.client, modified); err != nil {
+				return admission.Denied(err.Error())
+			} else if ok {
 				wasMutated = true
 			}
 		}

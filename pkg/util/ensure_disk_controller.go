@@ -263,7 +263,6 @@ func EnsureDisksHaveControllers(
 }
 
 const (
-	maxSCSIControllers                     = 4
 	maxSATAControllers                     = 4
 	maxNVMEControllers                     = 4
 	maxDisksPerSCSIController              = 16
@@ -610,7 +609,7 @@ func ensureDiskControllerCreate(
 
 	var controller vimtypes.BaseVirtualDevice
 	switch {
-	case diskControllers.numSCSIControllers() < maxSCSIControllers:
+	case diskControllers.numSCSIControllers() < int(MaxSCSIControllers):
 		// Prefer creating a new SCSI controller.
 		controller = &vimtypes.ParaVirtualSCSIController{
 			VirtualSCSIController: vimtypes.VirtualSCSIController{
