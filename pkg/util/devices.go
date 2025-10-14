@@ -5,7 +5,10 @@
 package util
 
 import (
+	"fmt"
+	"path"
 	"reflect"
+	"strings"
 
 	vimtypes "github.com/vmware/govmomi/vim25/types"
 )
@@ -235,4 +238,112 @@ func GetPreferredDiskFormat[T string | vimtypes.DatastoreSectorFormat](
 	}
 
 	return vimtypes.DatastoreSectorFormat(diskFormats[0])
+}
+
+// generateFallbackName generates a unique fallback name for devices.
+func generateFallbackName(
+	deviceType string,
+	deviceCount uint,
+	existingNames map[string]struct{}) string {
+	name := fmt.Sprintf("%s-%d", deviceType, deviceCount)
+	for {
+		if _, ok := existingNames[name]; !ok {
+			break
+		}
+		name += fmt.Sprintf("-%d", deviceCount)
+	}
+	return name
+}
+
+// ExtractDeviceNameAndUUID extracts device name and UUID from disk backing.
+func ExtractDeviceNameAndUUID(
+	disk *vimtypes.VirtualDisk,
+	diskCount uint,
+	existingNames map[string]struct{}) (name, uuid string) {
+
+	defer func() {
+		if name == "" {
+			name = generateFallbackName("disk", diskCount, existingNames)
+		}
+	}()
+
+	if disk == nil || disk.Backing == nil {
+		return "", ""
+	}
+
+	switch tb := disk.Backing.(type) {
+	case *vimtypes.VirtualDiskSeSparseBackingInfo:
+		name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
+		uuid = tb.Uuid
+	case *vimtypes.VirtualDiskSparseVer1BackingInfo:
+		name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
+	case *vimtypes.VirtualDiskSparseVer2BackingInfo:
+		name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
+		uuid = tb.Uuid
+	case *vimtypes.VirtualDiskFlatVer1BackingInfo:
+		name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
+	case *vimtypes.VirtualDiskFlatVer2BackingInfo:
+		name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
+		uuid = tb.Uuid
+	case *vimtypes.VirtualDiskLocalPMemBackingInfo:
+		name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
+		uuid = tb.Uuid
+	case *vimtypes.VirtualDiskRawDiskMappingVer1BackingInfo:
+		name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
+		uuid = tb.Uuid
+	case *vimtypes.VirtualDiskRawDiskVer2BackingInfo:
+		name = strings.TrimSuffix(path.Base(tb.DescriptorFileName), path.Ext(tb.DescriptorFileName))
+		uuid = tb.Uuid
+	case *vimtypes.VirtualDiskPartitionedRawDiskVer2BackingInfo:
+		name = strings.TrimSuffix(path.Base(tb.DescriptorFileName), path.Ext(tb.DescriptorFileName))
+		uuid = tb.Uuid
+	default:
+		if di := disk.DeviceInfo; di != nil {
+			if d := di.GetDescription(); d != nil {
+				name = d.Label
+			}
+		}
+	}
+
+	return name, uuid
+}
+
+// ExtractCdromName extracts device name from CDROM backing.
+func ExtractCdromName(
+	cdrom *vimtypes.VirtualCdrom,
+	cdromCount uint,
+	existingNames map[string]struct{}) (name string) {
+
+	defer func() {
+		if name == "" {
+			name = generateFallbackName("cdrom", cdromCount, existingNames)
+		}
+	}()
+
+	if cdrom == nil || cdrom.Backing == nil {
+		return ""
+	}
+
+	switch tb := cdrom.Backing.(type) {
+	case *vimtypes.VirtualCdromIsoBackingInfo:
+		name = strings.TrimSuffix(
+			path.Base(tb.FileName),
+			path.Ext(tb.FileName))
+	case *vimtypes.VirtualCdromRemotePassthroughBackingInfo:
+		name = tb.DeviceName
+	case *vimtypes.VirtualCdromAtapiBackingInfo:
+		name = tb.DeviceName
+	case *vimtypes.VirtualCdromRemoteAtapiBackingInfo:
+		name = tb.DeviceName
+	case *vimtypes.VirtualCdromPassthroughBackingInfo:
+		name = tb.DeviceName
+	default:
+		if di := cdrom.DeviceInfo; di != nil {
+			if d := di.GetDescription(); d != nil {
+				name = d.Label
+			}
+		}
+	}
+
+	return name
 }

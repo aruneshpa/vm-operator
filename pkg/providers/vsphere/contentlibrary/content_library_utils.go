@@ -7,7 +7,6 @@ package contentlibrary
 import (
 	"context"
 	"fmt"
-	"path"
 	"strconv"
 	"strings"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/vmware-tanzu/vm-operator/pkg/conditions"
 	pkgconst "github.com/vmware-tanzu/vm-operator/pkg/constants"
 	"github.com/vmware-tanzu/vm-operator/pkg/providers/vsphere/constants"
+	pkgutil "github.com/vmware-tanzu/vm-operator/pkg/util"
 	kubeutil "github.com/vmware-tanzu/vm-operator/pkg/util/kube"
 	"github.com/vmware-tanzu/vm-operator/pkg/util/ptr"
 )
@@ -156,56 +156,12 @@ func UpdateVmiWithVirtualMachine(
 		if disk, ok := bd.(*vimtypes.VirtualDisk); ok {
 
 			var (
-				name     string
 				capacity *resource.Quantity
 				size     *resource.Quantity
 			)
 
-			var uuid string
-			switch tb := disk.Backing.(type) {
-			case *vimtypes.VirtualDiskSeSparseBackingInfo:
-				name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
-				uuid = tb.Uuid
-			case *vimtypes.VirtualDiskSparseVer1BackingInfo:
-				name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
-			case *vimtypes.VirtualDiskSparseVer2BackingInfo:
-				name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
-				uuid = tb.Uuid
-			case *vimtypes.VirtualDiskFlatVer1BackingInfo:
-				name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
-			case *vimtypes.VirtualDiskFlatVer2BackingInfo:
-				name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
-				uuid = tb.Uuid
-			case *vimtypes.VirtualDiskLocalPMemBackingInfo:
-				name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
-				uuid = tb.Uuid
-			case *vimtypes.VirtualDiskRawDiskMappingVer1BackingInfo:
-				name = strings.TrimSuffix(path.Base(tb.FileName), path.Ext(tb.FileName))
-				uuid = tb.Uuid
-			case *vimtypes.VirtualDiskRawDiskVer2BackingInfo:
-				name = strings.TrimSuffix(path.Base(tb.DescriptorFileName), path.Ext(tb.DescriptorFileName))
-				uuid = tb.Uuid
-			case *vimtypes.VirtualDiskPartitionedRawDiskVer2BackingInfo:
-				name = strings.TrimSuffix(path.Base(tb.DescriptorFileName), path.Ext(tb.DescriptorFileName))
-				uuid = tb.Uuid
-			default:
-				capacity = kubeutil.BytesToResource(disk.CapacityInBytes)
-				if di := disk.DeviceInfo; di != nil {
-					if d := di.GetDescription(); d != nil {
-						name = d.Label
-					}
-				}
-			}
-
-			if name == "" {
-				name = fmt.Sprintf("disk-%d", len(status.Disks))
-				for {
-					if _, ok := diskNames[name]; !ok {
-						break
-					}
-					name += fmt.Sprintf("-%d", len(status.Disks))
-				}
-			}
+			name, uuid := pkgutil.ExtractDeviceNameAndUUID(
+				disk, uint(len(status.Disks)), diskNames)
 			diskNames[name] = struct{}{}
 
 			if uuid != "" {

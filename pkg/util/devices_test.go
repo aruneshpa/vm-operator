@@ -370,3 +370,338 @@ var _ = Describe("GetPreferredDiskFormat", func() {
 		),
 	)
 })
+
+var _ = Describe("ExtractDeviceNameAndUUID", func() {
+	var (
+		disk          *vimtypes.VirtualDisk
+		diskCount     uint
+		existingNames map[string]struct{}
+	)
+
+	BeforeEach(func() {
+		existingNames = map[string]struct{}{}
+		diskCount = 0
+	})
+
+	When("disk is nil", func() {
+		It("should generate fallback name when diskCount is provided", func() {
+			name, uuid := util.ExtractDeviceNameAndUUID(nil, diskCount, existingNames)
+			Expect(name).To(Equal("disk-0"))
+			Expect(uuid).To(BeEmpty())
+		})
+	})
+
+	When("disk backing is nil", func() {
+		It("should generate fallback name when diskCount is provided", func() {
+			disk = &vimtypes.VirtualDisk{}
+			name, uuid := util.ExtractDeviceNameAndUUID(disk, diskCount, existingNames)
+			Expect(name).To(Equal("disk-0"))
+			Expect(uuid).To(BeEmpty())
+		})
+	})
+
+	When("disk has SeSparse backing", func() {
+		It("should extract name and UUID", func() {
+			disk = &vimtypes.VirtualDisk{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualDiskSeSparseBackingInfo{
+						VirtualDeviceFileBackingInfo: vimtypes.VirtualDeviceFileBackingInfo{
+							FileName: "/vmfs/volumes/datastore1/vm1/disk1.vmdk",
+						},
+						Uuid: "test-uuid-123",
+					},
+				},
+			}
+			name, uuid := util.ExtractDeviceNameAndUUID(disk, diskCount, existingNames)
+			Expect(name).To(Equal("disk1"))
+			Expect(uuid).To(Equal("test-uuid-123"))
+		})
+	})
+
+	When("disk has SparseVer2 backing", func() {
+		It("should extract name and UUID", func() {
+			disk = &vimtypes.VirtualDisk{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualDiskSparseVer2BackingInfo{
+						VirtualDeviceFileBackingInfo: vimtypes.VirtualDeviceFileBackingInfo{
+							FileName: "/vmfs/volumes/datastore1/vm1/disk2.vmdk",
+						},
+						Uuid: "test-uuid-456",
+					},
+				},
+			}
+			name, uuid := util.ExtractDeviceNameAndUUID(disk, diskCount, existingNames)
+			Expect(name).To(Equal("disk2"))
+			Expect(uuid).To(Equal("test-uuid-456"))
+		})
+	})
+
+	When("disk has FlatVer2 backing", func() {
+		It("should extract name and UUID", func() {
+			disk = &vimtypes.VirtualDisk{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualDiskFlatVer2BackingInfo{
+						VirtualDeviceFileBackingInfo: vimtypes.VirtualDeviceFileBackingInfo{
+							FileName: "/vmfs/volumes/datastore1/vm1/disk3.vmdk",
+						},
+						Uuid: "test-uuid-789",
+					},
+				},
+			}
+			name, uuid := util.ExtractDeviceNameAndUUID(disk, diskCount, existingNames)
+			Expect(name).To(Equal("disk3"))
+			Expect(uuid).To(Equal("test-uuid-789"))
+		})
+	})
+
+	When("disk has RawDiskVer2 backing", func() {
+		It("should extract name from DescriptorFileName and UUID", func() {
+			disk = &vimtypes.VirtualDisk{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualDiskRawDiskVer2BackingInfo{
+						DescriptorFileName: "/vmfs/volumes/datastore1/vm1/disk4.vmdk",
+						Uuid:               "test-uuid-raw",
+					},
+				},
+			}
+			name, uuid := util.ExtractDeviceNameAndUUID(disk, diskCount, existingNames)
+			Expect(name).To(Equal("disk4"))
+			Expect(uuid).To(Equal("test-uuid-raw"))
+		})
+	})
+
+	When("disk has SparseVer1 backing (no UUID)", func() {
+		It("should extract name only", func() {
+			disk = &vimtypes.VirtualDisk{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualDiskSparseVer1BackingInfo{
+						VirtualDeviceFileBackingInfo: vimtypes.VirtualDeviceFileBackingInfo{
+							FileName: "/vmfs/volumes/datastore1/vm1/disk5.vmdk",
+						},
+					},
+				},
+			}
+			name, uuid := util.ExtractDeviceNameAndUUID(disk, diskCount, existingNames)
+			Expect(name).To(Equal("disk5"))
+			Expect(uuid).To(BeEmpty())
+		})
+	})
+
+	When("disk has unknown backing type", func() {
+		It("should fallback to DeviceInfo label", func() {
+			disk = &vimtypes.VirtualDisk{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualDeviceFileBackingInfo{
+						FileName: "/vmfs/volumes/datastore1/vm1/disk6.vmdk",
+					},
+					DeviceInfo: &vimtypes.Description{
+						Label: "Custom Disk Label",
+					},
+				},
+			}
+			name, uuid := util.ExtractDeviceNameAndUUID(disk, diskCount, existingNames)
+			Expect(name).To(Equal("Custom Disk Label"))
+			Expect(uuid).To(BeEmpty())
+		})
+	})
+
+	When("disk has unknown backing type and no DeviceInfo", func() {
+		It("should generate fallback name when diskCount is provided", func() {
+			disk = &vimtypes.VirtualDisk{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualDeviceFileBackingInfo{
+						FileName: "/vmfs/volumes/datastore1/vm1/disk7.vmdk",
+					},
+				},
+			}
+			name, uuid := util.ExtractDeviceNameAndUUID(disk, diskCount, existingNames)
+			Expect(name).To(Equal("disk-0"))
+			Expect(uuid).To(BeEmpty())
+		})
+	})
+
+	When("filename has no extension", func() {
+		It("should return the full filename", func() {
+			disk = &vimtypes.VirtualDisk{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualDiskFlatVer2BackingInfo{
+						VirtualDeviceFileBackingInfo: vimtypes.VirtualDeviceFileBackingInfo{
+							FileName: "/vmfs/volumes/datastore1/vm1/disk-without-extension",
+						},
+						Uuid: "test-uuid-no-ext",
+					},
+				},
+			}
+			name, uuid := util.ExtractDeviceNameAndUUID(disk, diskCount, existingNames)
+			Expect(name).To(Equal("disk-without-extension"))
+			Expect(uuid).To(Equal("test-uuid-no-ext"))
+		})
+	})
+})
+
+var _ = Describe("ExtractCdromName", func() {
+	var (
+		cdrom         *vimtypes.VirtualCdrom
+		cdromCount    uint
+		existingNames map[string]struct{}
+	)
+
+	BeforeEach(func() {
+		existingNames = map[string]struct{}{}
+		cdromCount = 0
+	})
+
+	When("cdrom is nil", func() {
+		It("should return fallback name", func() {
+			name := util.ExtractCdromName(nil, cdromCount, existingNames)
+			Expect(name).To(Equal("cdrom-0"))
+		})
+	})
+
+	When("cdrom backing is nil", func() {
+		It("should return fallback name", func() {
+			cdrom = &vimtypes.VirtualCdrom{}
+			name := util.ExtractCdromName(cdrom, cdromCount, existingNames)
+			Expect(name).To(Equal("cdrom-0"))
+		})
+	})
+
+	When("cdrom has ISO backing", func() {
+		It("should extract name from filename", func() {
+			cdrom = &vimtypes.VirtualCdrom{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualCdromIsoBackingInfo{
+						VirtualDeviceFileBackingInfo: vimtypes.VirtualDeviceFileBackingInfo{
+							FileName: "/vmfs/volumes/datastore1/vm1/ubuntu.iso",
+						},
+					},
+				},
+			}
+			name := util.ExtractCdromName(cdrom, cdromCount, existingNames)
+			Expect(name).To(Equal("ubuntu"))
+		})
+	})
+
+	When("cdrom has remote passthrough backing", func() {
+		It("should extract name from device name", func() {
+			cdrom = &vimtypes.VirtualCdrom{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualCdromRemotePassthroughBackingInfo{
+						VirtualDeviceRemoteDeviceBackingInfo: vimtypes.VirtualDeviceRemoteDeviceBackingInfo{
+							DeviceName: "Remote CD-ROM Device",
+						},
+					},
+				},
+			}
+			name := util.ExtractCdromName(cdrom, cdromCount, existingNames)
+			Expect(name).To(Equal("Remote CD-ROM Device"))
+		})
+	})
+
+	When("cdrom has ATAPI backing", func() {
+		It("should extract name from device name", func() {
+			cdrom = &vimtypes.VirtualCdrom{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualCdromAtapiBackingInfo{
+						VirtualDeviceDeviceBackingInfo: vimtypes.VirtualDeviceDeviceBackingInfo{
+							DeviceName: "ATAPI CD-ROM",
+						},
+					},
+				},
+			}
+			name := util.ExtractCdromName(cdrom, cdromCount, existingNames)
+			Expect(name).To(Equal("ATAPI CD-ROM"))
+		})
+	})
+
+	When("cdrom has remote ATAPI backing", func() {
+		It("should extract name from device name", func() {
+			cdrom = &vimtypes.VirtualCdrom{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualCdromRemoteAtapiBackingInfo{
+						VirtualDeviceRemoteDeviceBackingInfo: vimtypes.VirtualDeviceRemoteDeviceBackingInfo{
+							DeviceName: "Remote ATAPI CD-ROM",
+						},
+					},
+				},
+			}
+			name := util.ExtractCdromName(cdrom, cdromCount, existingNames)
+			Expect(name).To(Equal("Remote ATAPI CD-ROM"))
+		})
+	})
+
+	When("cdrom has passthrough backing", func() {
+		It("should extract name from device name", func() {
+			cdrom = &vimtypes.VirtualCdrom{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualCdromPassthroughBackingInfo{
+						VirtualDeviceDeviceBackingInfo: vimtypes.VirtualDeviceDeviceBackingInfo{
+							DeviceName: "Passthrough CD-ROM",
+						},
+					},
+				},
+			}
+			name := util.ExtractCdromName(cdrom, cdromCount, existingNames)
+			Expect(name).To(Equal("Passthrough CD-ROM"))
+		})
+	})
+
+	When("cdrom has unknown backing with DeviceInfo", func() {
+		It("should extract name from DeviceInfo label", func() {
+			cdrom = &vimtypes.VirtualCdrom{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualDeviceFileBackingInfo{
+						FileName: "/vmfs/volumes/datastore1/vm1/cdrom.vmdk",
+					},
+					DeviceInfo: &vimtypes.Description{
+						Label: "Custom CD-ROM Label",
+					},
+				},
+			}
+			name := util.ExtractCdromName(cdrom, cdromCount, existingNames)
+			Expect(name).To(Equal("Custom CD-ROM Label"))
+		})
+	})
+
+	When("cdrom has unknown backing without DeviceInfo", func() {
+		It("should return fallback name", func() {
+			cdrom = &vimtypes.VirtualCdrom{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualDeviceFileBackingInfo{
+						FileName: "/vmfs/volumes/datastore1/vm1/cdrom.vmdk",
+					},
+				},
+			}
+			name := util.ExtractCdromName(cdrom, cdromCount, existingNames)
+			Expect(name).To(Equal("cdrom-0"))
+		})
+	})
+
+	When("fallback name conflicts with existing names", func() {
+		It("should generate unique name by appending count", func() {
+			existingNames["cdrom-0"] = struct{}{}
+			existingNames["cdrom-0-0"] = struct{}{}
+			existingNames["cdrom-0-0-0"] = struct{}{}
+
+			cdrom = &vimtypes.VirtualCdrom{}
+			name := util.ExtractCdromName(cdrom, cdromCount, existingNames)
+			Expect(name).To(Equal("cdrom-0-0-0-0"))
+		})
+	})
+
+	When("ISO filename has no extension", func() {
+		It("should return the full filename", func() {
+			cdrom = &vimtypes.VirtualCdrom{
+				VirtualDevice: vimtypes.VirtualDevice{
+					Backing: &vimtypes.VirtualCdromIsoBackingInfo{
+						VirtualDeviceFileBackingInfo: vimtypes.VirtualDeviceFileBackingInfo{
+							FileName: "/vmfs/volumes/datastore1/vm1/ubuntu",
+						},
+					},
+				},
+			}
+			name := util.ExtractCdromName(cdrom, cdromCount, existingNames)
+			Expect(name).To(Equal("ubuntu"))
+		})
+	})
+})
