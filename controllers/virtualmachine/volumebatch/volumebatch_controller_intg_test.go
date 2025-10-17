@@ -41,21 +41,23 @@ func intgTestsReconcile() {
 	var (
 		ctx *builder.IntegrationTestContext
 
-		vm             *vmopv1.VirtualMachine
-		vmKey          types.NamespacedName
-		vmVolume1      vmopv1.VirtualMachineVolume
-		vmVolume2      vmopv1.VirtualMachineVolume
-		pvc1           *corev1.PersistentVolumeClaim
-		pvc2           *corev1.PersistentVolumeClaim
-		dummyBiosUUID  string
-		dummyDiskUUID1 string
-		dummyDiskUUID2 string
+		vm                *vmopv1.VirtualMachine
+		vmKey             types.NamespacedName
+		vmVolume1         vmopv1.VirtualMachineVolume
+		vmVolume2         vmopv1.VirtualMachineVolume
+		pvc1              *corev1.PersistentVolumeClaim
+		pvc2              *corev1.PersistentVolumeClaim
+		dummyBiosUUID     string
+		dummyInstanceUUID string
+		dummyDiskUUID1    string
+		dummyDiskUUID2    string
 	)
 
 	BeforeEach(func() {
 		ctx = suite.NewIntegrationTestContext()
 
 		dummyBiosUUID = uuid.New().String()
+		dummyInstanceUUID = uuid.New().String()
 		dummyDiskUUID1 = uuid.New().String()
 		dummyDiskUUID2 = uuid.New().String()
 
@@ -196,8 +198,9 @@ func intgTestsReconcile() {
 					Expect(vm.Status.Volumes).To(BeEmpty())
 				})
 
-				By("Assign VM BiosUUID", func() {
+				By("Assign VM BiosUUID and InstanceUUID", func() {
 					vm.Status.BiosUUID = dummyBiosUUID
+					vm.Status.InstanceUUID = dummyInstanceUUID
 					Expect(ctx.Client.Status().Update(ctx, vm)).To(Succeed())
 				})
 
@@ -225,7 +228,7 @@ func intgTestsReconcile() {
 				Expect(vm.Status.Volumes).To(BeEmpty())
 			})
 
-			By("Assign VM BiosUUID", func() {
+			By("Assign VM BiosUUID and InstanceUUID", func() {
 				vm.Status.BiosUUID = dummyBiosUUID
 				vm.Status.Hardware = &vmopv1.VirtualMachineHardwareStatus{
 					Controllers: []vmopv1.VirtualControllerStatus{
@@ -236,6 +239,7 @@ func intgTestsReconcile() {
 						},
 					},
 				}
+				vm.Status.InstanceUUID = dummyInstanceUUID
 				Expect(ctx.Client.Status().Update(ctx, vm)).To(Succeed())
 			})
 
@@ -256,7 +260,7 @@ func intgTestsReconcile() {
 					g.Expect(attachment).ToNot(BeNil())
 				}).Should(Succeed())
 
-				Expect(attachment.Spec.NodeUUID).To(Equal(dummyBiosUUID))
+				Expect(attachment.Spec.NodeUUID).To(Equal(dummyInstanceUUID))
 				Expect(attachment.Spec.Volumes).To(HaveLen(1))
 				Expect(attachment.Spec.Volumes[0].Name).To(Equal(vmVolume1.Name))
 			})
@@ -314,7 +318,7 @@ func intgTestsReconcile() {
 		It("Reconciles VirtualMachine with multiple Spec.Volumes", func() {
 			Expect(ctx.Client.Create(ctx, vm)).To(Succeed())
 
-			By("Assign VM BiosUUID", func() {
+			By("Assign VM BiosUUID and InstanceUUID", func() {
 				vm.Status.BiosUUID = dummyBiosUUID
 				vm.Status.Hardware = &vmopv1.VirtualMachineHardwareStatus{
 					Controllers: []vmopv1.VirtualControllerStatus{
@@ -325,6 +329,7 @@ func intgTestsReconcile() {
 						},
 					},
 				}
+				vm.Status.InstanceUUID = dummyInstanceUUID
 				Expect(ctx.Client.Status().Update(ctx, vm)).To(Succeed())
 			})
 
@@ -349,7 +354,7 @@ func intgTestsReconcile() {
 					g.Expect(attachment).ToNot(BeNil())
 				}).Should(Succeed())
 
-				Expect(attachment.Spec.NodeUUID).To(Equal(dummyBiosUUID))
+				Expect(attachment.Spec.NodeUUID).To(Equal(dummyInstanceUUID))
 				Expect(attachment.Spec.Volumes).To(HaveLen(2))
 				Expect(attachment.Spec.Volumes[0].Name).To(Equal(vmVolume1.Name))
 				Expect(attachment.Spec.Volumes[1].Name).To(Equal(vmVolume2.Name))
