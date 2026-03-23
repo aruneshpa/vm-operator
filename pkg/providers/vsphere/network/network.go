@@ -710,23 +710,65 @@ func createVPCNetworkInterface(
 		networkRefType = netRef.TypeMeta
 	}
 
-	vpcSubnetPort := &vpcv1alpha1.SubnetPort{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      VPCCRName(vmCtx.VM.Name, networkRefName, interfaceSpec.Name),
-			Namespace: vmCtx.VM.Namespace,
-		},
-	}
-
+	desiredSpec := vpcv1alpha1.SubnetPortSpec{}
 	switch networkRefType.Kind {
 	case "SubnetSet", "":
-		vpcSubnetPort.Spec.SubnetSet = networkRefName
+		desiredSpec.SubnetSet = networkRefName
 	case "Subnet":
-		vpcSubnetPort.Spec.Subnet = networkRefName
+		desiredSpec.Subnet = networkRefName
 	default:
 		return nil, fmt.Errorf("network kind %q is not supported for VPC", networkRefType.Kind)
 	}
 
-	_, err := controllerutil.CreateOrPatch(vmCtx, client, vpcSubnetPort, func() error {
+	desiredSpec.AddressBindings = buildVPCAddressBindings(vmCtx, interfaceSpec)
+
+	objKey := types.NamespacedName{
+		Name:      VPCCRName(vmCtx.VM.Name, networkRefName, interfaceSpec.Name),
+		Namespace: vmCtx.VM.Namespace,
+	}
+
+	existing := &vpcv1alpha1.SubnetPort{}
+	err := client.Get(vmCtx, objKey, existing)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return nil, fmt.Errorf("failed to get SubnetPort %s: %w", objKey, err)
+	}
+
+	objectExists := err == nil
+
+	// NSX Operator does not support patching SubnetPort spec fields. When a
+	// SubnetPort is on a Subnet with static IP allocation, NSX allocates the IP
+	// from an internal pool (allocate_addresses="BOTH"/"IP_POOL") and rejects
+	// in-place changes to those bindings. Changing Subnet/SubnetSet also
+	// requires the port to be on a different NSX Subnet entirely. In both
+	// cases, the only option is to delete and recreate.
+	if objectExists && vpcSubnetPortSpecChanged(&existing.Spec, &desiredSpec) {
+		vmCtx.Logger.Info(
+			"SubnetPort spec changed, deleting for recreation",
+			"subnetPort", objKey)
+
+		if err := client.Delete(vmCtx, existing); err != nil {
+			return nil, fmt.Errorf("failed to delete SubnetPort %s for recreation: %w", objKey, err)
+		}
+
+		if err := waitForSubnetPortDeletion(vmCtx, client, objKey); err != nil {
+			return nil, err
+		}
+
+		objectExists = false
+	}
+
+	vpcSubnetPort := &vpcv1alpha1.SubnetPort{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      objKey.Name,
+			Namespace: objKey.Namespace,
+		},
+	}
+
+	if objectExists {
+		vpcSubnetPort = existing
+	}
+
+	_, err = controllerutil.CreateOrPatch(vmCtx, client, vpcSubnetPort, func() error {
 		if err := SetNetworkInterfaceOwnerRef(vmCtx.VM, vpcSubnetPort, client.Scheme()); err != nil {
 			return err
 		}
@@ -742,65 +784,7 @@ func createVPCNetworkInterface(
 		}
 		vpcSubnetPort.Annotations[constants.VPCAttachmentRef] = "virtualmachine/" + vmCtx.VM.Name + "/" + interfaceSpec.Name
 
-		vpcSubnetPort.Spec.AddressBindings = nil
-
-		// TBD: It doesn't look like VPC actually reconciles if these change.
-		switch {
-		case len(interfaceSpec.Addresses) > 0:
-			for _, ipCidr := range interfaceSpec.Addresses {
-				// Our interface spec IPs include the CIDR but VPC takes just
-				// the IP address. This can lead to funkiness if the user
-				// specified an invalid prefix for this network. Here is what
-				// we're going to do: applyInterfaceSpecToResult() will just use
-				// whatever comes back in the SubnetPort Status, ignoring the
-				// user prefix. It might be nicer to allow bare IPs only when
-				// using VPC.
-				ip, _, err := pkgutil.ParseIP(ipCidr)
-
-				var skipReason string
-				switch {
-				case err != nil:
-					skipReason = err.Error()
-				case ip == nil:
-					skipReason = "nil ip"
-				case ip.IsUnspecified():
-					skipReason = "unspecified"
-				case ip.IsLinkLocalMulticast():
-					skipReason = "link local multicast"
-				case ip.IsLinkLocalUnicast():
-					skipReason = "link local unicast"
-				case ip.IsLoopback():
-					skipReason = "loopback"
-				}
-
-				if skipReason != "" {
-					vmCtx.Logger.Info(
-						"Skipping IP address",
-						"ip", ipCidr,
-						"reason", skipReason)
-					continue
-				}
-
-				// Despite being a list, VPC currently only supports just one PortAddressBinding.
-				vpcSubnetPort.Spec.AddressBindings = []vpcv1alpha1.PortAddressBinding{
-					{
-						IPAddress:  ip.String(),
-						MACAddress: strings.ToLower(interfaceSpec.MACAddr),
-					},
-				}
-				break
-			}
-		case interfaceSpec.MACAddr != "":
-			// TBD: VPC will default the MAC when only specifying an IP, but
-			// will not do IPAM when only the specifying the MAC, but they'll
-			// have to fix that for no IPAM, right, right?
-			vpcSubnetPort.Spec.AddressBindings = []vpcv1alpha1.PortAddressBinding{
-				{
-					MACAddress: strings.ToLower(interfaceSpec.MACAddr),
-				},
-			}
-		}
-
+		vpcSubnetPort.Spec = desiredSpec
 		return nil
 	})
 
@@ -814,6 +798,102 @@ func createVPCNetworkInterface(
 	}
 
 	return vpcSubnetPortToResult(vmCtx, vimClient, clusterMoRef, vpcSubnetPort)
+}
+
+// buildVPCAddressBindings constructs the desired AddressBindings from the
+// interface spec. VPC currently only supports a single PortAddressBinding.
+func buildVPCAddressBindings(
+	vmCtx pkgctx.VirtualMachineContext,
+	interfaceSpec *vmopv1.VirtualMachineNetworkInterfaceSpec,
+) []vpcv1alpha1.PortAddressBinding {
+
+	switch {
+	case len(interfaceSpec.Addresses) > 0:
+		for _, ipCidr := range interfaceSpec.Addresses {
+			ip, _, err := pkgutil.ParseIP(ipCidr)
+
+			var skipReason string
+			switch {
+			case err != nil:
+				skipReason = err.Error()
+			case ip == nil:
+				skipReason = "nil ip"
+			case ip.IsUnspecified():
+				skipReason = "unspecified"
+			case ip.IsLinkLocalMulticast():
+				skipReason = "link local multicast"
+			case ip.IsLinkLocalUnicast():
+				skipReason = "link local unicast"
+			case ip.IsLoopback():
+				skipReason = "loopback"
+			}
+
+			if skipReason != "" {
+				vmCtx.Logger.Info(
+					"Skipping IP address",
+					"ip", ipCidr,
+					"reason", skipReason)
+				continue
+			}
+
+			return []vpcv1alpha1.PortAddressBinding{
+				{
+					IPAddress:  ip.String(),
+					MACAddress: strings.ToLower(interfaceSpec.MACAddr),
+				},
+			}
+		}
+	case interfaceSpec.MACAddr != "":
+		return []vpcv1alpha1.PortAddressBinding{
+			{
+				MACAddress: strings.ToLower(interfaceSpec.MACAddr),
+			},
+		}
+	}
+
+	return nil
+}
+
+// vpcSubnetPortSpecChanged reports whether the SubnetPort spec has changed in
+// a way that requires delete+recreate. NSX Operator cannot apply in-place
+// changes to Subnet, SubnetSet, or AddressBindings on ports with pool-allocated
+// addresses.
+func vpcSubnetPortSpecChanged(existing, desired *vpcv1alpha1.SubnetPortSpec) bool {
+	if existing.Subnet != desired.Subnet ||
+		existing.SubnetSet != desired.SubnetSet {
+		return true
+	}
+
+	if len(existing.AddressBindings) != len(desired.AddressBindings) {
+		return true
+	}
+	for i := range existing.AddressBindings {
+		if existing.AddressBindings[i].IPAddress != desired.AddressBindings[i].IPAddress ||
+			existing.AddressBindings[i].MACAddress != desired.AddressBindings[i].MACAddress {
+			return true
+		}
+	}
+
+	return false
+}
+
+func waitForSubnetPortDeletion(
+	ctx context.Context,
+	client ctrlclient.Client,
+	key types.NamespacedName,
+) error {
+	return wait.PollUntilContextTimeout(
+		ctx, retryInterval, RetryTimeout, true,
+		func(_ context.Context) (bool, error) {
+			if err := client.Get(ctx, key, &vpcv1alpha1.SubnetPort{}); err != nil {
+				if apierrors.IsNotFound(err) {
+					return true, nil
+				}
+				return false, err
+			}
+			return false, nil
+		},
+	)
 }
 
 func vpcSubnetPortToResult(

@@ -1958,6 +1958,212 @@ var _ = Describe("CreateAndWaitForNetworkInterfaces", Label(testlabels.VCSim), f
 				})
 			})
 		})
+
+		Context("SubnetPort recreation on spec change", func() {
+
+			// createReadySubnetPort is a helper that creates a SubnetPort and
+			// simulates NSX Operator reconciling it to Ready.
+			createReadySubnetPort := func(spec *vmopv1.VirtualMachineNetworkSpec) {
+				networkSpec = spec
+				results, err = network.CreateAndWaitForNetworkInterfaces(
+					vmCtx,
+					ctx.Client,
+					ctx.VCClient.Client,
+					ctx.Finder,
+					nil,
+					networkSpec)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("network interface is not ready yet"))
+
+				subnetPort := &vpcv1alpha1.SubnetPort{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      network.VPCCRName(vm.Name, networkName, interfaceName),
+						Namespace: vm.Namespace,
+					},
+				}
+				Expect(ctx.Client.Get(ctx, client.ObjectKeyFromObject(subnetPort), subnetPort)).To(Succeed())
+
+				subnetPort.Status.Attachment.ID = interfaceID
+				subnetPort.Status.NetworkInterfaceConfig.MACAddress = macAddress
+				subnetPort.Status.NetworkInterfaceConfig.LogicalSwitchUUID = builder.GetVPCTLogicalSwitchUUID(0)
+				subnetPort.Status.NetworkInterfaceConfig.IPAddresses = []vpcv1alpha1.NetworkInterfaceIPAddress{
+					{
+						IPAddress: "192.168.1.110/24",
+						Gateway:   "192.168.1.1",
+					},
+				}
+				subnetPort.Status.Conditions = []vpcv1alpha1.Condition{
+					{
+						Type:   vpcv1alpha1.Ready,
+						Status: corev1.ConditionTrue,
+					},
+				}
+				Expect(ctx.Client.Status().Update(ctx, subnetPort)).To(Succeed())
+			}
+
+			When("AddressBindings IP changes", func() {
+				const (
+					origIP = "192.168.1.100"
+					newIP  = "192.168.1.200"
+				)
+
+				BeforeEach(func() {
+					networkSpec.Interfaces = []vmopv1.VirtualMachineNetworkInterfaceSpec{
+						{
+							Name: interfaceName,
+							Network: &common.PartialObjectRef{
+								Name: networkName,
+								TypeMeta: metav1.TypeMeta{
+									Kind:       "SubnetSet",
+									APIVersion: "crd.nsx.vmware.com/v1alpha1",
+								},
+							},
+							Addresses: []string{origIP + "/24"},
+							MACAddr:   macAddress,
+						},
+					}
+				})
+
+				It("deletes and recreates the SubnetPort with the new IP", func() {
+					createReadySubnetPort(networkSpec)
+
+					By("verify original SubnetPort has the original IP binding")
+					subnetPort := &vpcv1alpha1.SubnetPort{}
+					spKey := client.ObjectKey{
+						Namespace: vm.Namespace,
+						Name:      network.VPCCRName(vm.Name, networkName, interfaceName),
+					}
+					Expect(ctx.Client.Get(ctx, spKey, subnetPort)).To(Succeed())
+					Expect(subnetPort.Spec.AddressBindings).To(HaveLen(1))
+					Expect(subnetPort.Spec.AddressBindings[0].IPAddress).To(Equal(origIP))
+					origUID := subnetPort.UID
+
+					By("change the IP address and call again")
+					networkSpec.Interfaces[0].Addresses = []string{newIP + "/24"}
+
+					results, err = network.CreateAndWaitForNetworkInterfaces(
+						vmCtx,
+						ctx.Client,
+						ctx.VCClient.Client,
+						ctx.Finder,
+						nil,
+						networkSpec)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("network interface is not ready yet"))
+
+					By("verify a new SubnetPort was created with the new IP")
+					newSubnetPort := &vpcv1alpha1.SubnetPort{}
+					Expect(ctx.Client.Get(ctx, spKey, newSubnetPort)).To(Succeed())
+					Expect(newSubnetPort.Spec.AddressBindings).To(HaveLen(1))
+					Expect(newSubnetPort.Spec.AddressBindings[0].IPAddress).To(Equal(newIP))
+					Expect(newSubnetPort.UID).ToNot(Equal(origUID))
+				})
+			})
+
+			When("SubnetSet changes", func() {
+				const newNetworkName = "my-other-vpc-network"
+
+				BeforeEach(func() {
+					networkSpec.Interfaces = []vmopv1.VirtualMachineNetworkInterfaceSpec{
+						{
+							Name: interfaceName,
+							Network: &common.PartialObjectRef{
+								Name: networkName,
+								TypeMeta: metav1.TypeMeta{
+									Kind:       "SubnetSet",
+									APIVersion: "crd.nsx.vmware.com/v1alpha1",
+								},
+							},
+						},
+					}
+				})
+
+				It("deletes and recreates the SubnetPort with the new SubnetSet", func() {
+					createReadySubnetPort(networkSpec)
+
+					subnetPort := &vpcv1alpha1.SubnetPort{}
+					spKey := client.ObjectKey{
+						Namespace: vm.Namespace,
+						Name:      network.VPCCRName(vm.Name, networkName, interfaceName),
+					}
+					Expect(ctx.Client.Get(ctx, spKey, subnetPort)).To(Succeed())
+					Expect(subnetPort.Spec.SubnetSet).To(Equal(networkName))
+					origUID := subnetPort.UID
+
+					By("change the SubnetSet and call again")
+					networkSpec.Interfaces[0].Network.Name = newNetworkName
+
+					results, err = network.CreateAndWaitForNetworkInterfaces(
+						vmCtx,
+						ctx.Client,
+						ctx.VCClient.Client,
+						ctx.Finder,
+						nil,
+						networkSpec)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("network interface is not ready yet"))
+
+					By("verify the old SubnetPort was deleted")
+					oldSubnetPort := &vpcv1alpha1.SubnetPort{}
+					err := ctx.Client.Get(ctx, spKey, oldSubnetPort)
+					if err == nil {
+						Expect(oldSubnetPort.UID).ToNot(Equal(origUID))
+					}
+
+					By("verify new SubnetPort was created with the new SubnetSet name")
+					newSpKey := client.ObjectKey{
+						Namespace: vm.Namespace,
+						Name:      network.VPCCRName(vm.Name, newNetworkName, interfaceName),
+					}
+					newSubnetPort := &vpcv1alpha1.SubnetPort{}
+					Expect(ctx.Client.Get(ctx, newSpKey, newSubnetPort)).To(Succeed())
+					Expect(newSubnetPort.Spec.SubnetSet).To(Equal(newNetworkName))
+				})
+			})
+
+			When("spec is unchanged", func() {
+				BeforeEach(func() {
+					networkSpec.Interfaces = []vmopv1.VirtualMachineNetworkInterfaceSpec{
+						{
+							Name: interfaceName,
+							Network: &common.PartialObjectRef{
+								Name: networkName,
+								TypeMeta: metav1.TypeMeta{
+									Kind:       "SubnetSet",
+									APIVersion: "crd.nsx.vmware.com/v1alpha1",
+								},
+							},
+						},
+					}
+				})
+
+				It("does not delete or recreate the SubnetPort", func() {
+					createReadySubnetPort(networkSpec)
+
+					subnetPort := &vpcv1alpha1.SubnetPort{}
+					spKey := client.ObjectKey{
+						Namespace: vm.Namespace,
+						Name:      network.VPCCRName(vm.Name, networkName, interfaceName),
+					}
+					Expect(ctx.Client.Get(ctx, spKey, subnetPort)).To(Succeed())
+					origUID := subnetPort.UID
+
+					By("call again with the same spec")
+					results, err = network.CreateAndWaitForNetworkInterfaces(
+						vmCtx,
+						ctx.Client,
+						ctx.VCClient.Client,
+						ctx.Finder,
+						nil,
+						networkSpec)
+					Expect(err).ToNot(HaveOccurred())
+
+					By("verify the same SubnetPort still exists (same UID)")
+					Expect(ctx.Client.Get(ctx, spKey, subnetPort)).To(Succeed())
+					Expect(subnetPort.UID).To(Equal(origUID))
+				})
+			})
+		})
 	})
 })
 
