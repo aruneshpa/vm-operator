@@ -174,6 +174,85 @@ live in the `vmoperator-reverse-reconcile-config` ConfigMap (§8 of design doc; 
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 ```
 
+Without the `virtualmachines/status` marker, the first status write fails with `forbidden`
+and the framework is silently broken.
+
+### Leader election scope
+
+The `ReverseReconcileController` is co-deployed in the **same Manager** as the existing
+`VirtualMachine` controller and shares the same leader election lease
+(`NeedLeaderElection() == true` is automatic for controller-runtime managers). This is
+required because:
+
+- The status-echo cache (suppresses redundant K8s patches on DRS churn) and the
+  paired-event cache (corroborates EventSub events with property-collector changes) both
+  live in-process; they must be coherent with the watcher state.
+- On leader handoff, both the watcher and the decision engine restart together; the event
+  replay window (`eventReplayWindow=30m`) covers both, ensuring no events are missed.
+
+Do **not** deploy `ReverseReconcileController` in a separate Manager or a separate
+Deployment; this would break the cache coherence invariant (CC1-13, CC4-04).
+
+### vCenter permissions
+
+The detection layer requires the following vCenter privileges beyond those already held
+by the vm-operator ServiceAccount:
+
+| Capability | vCenter privilege |
+|---|---|
+| Property Collector on cluster/host MOs (periodic resync) | `System.View` on the relevant Folder/Cluster |
+| Event Manager subscription | `Global.Diagnostics` (read events) |
+| `PermissionAddedEvent` / `RoleUpdatedEvent` | `Authorization.ModifyPermissions` (read-only; some VC builds) |
+| CIS Tagging read (vendor heuristic) | `InventoryService.Tagging.ObjectAttachable` |
+| `RetrieveProperties` for Leave disambiguation | already covered by `System.View` |
+
+A **startup self-check** runs one representative API call per detection source. On
+failure: do NOT abort startup (other sources may be working). Instead, set a
+`VirtualMachineReverseReconcileDegraded{Reason=MissingVCPrivilege, Source=<name>}`
+condition and emit a per-source Warning Event so operators can triage without looking at
+logs. Implemented in task C-02.
+
+---
+
+## Observability
+
+### Kubernetes Events
+
+| Event | Reason | Severity |
+|---|---|---|
+| `VirtualMachineSpecAdopted` | per-op (e.g. `PowerStateAdopted`) | Normal |
+| `VirtualMachineAdminChangeReverted` | per-op (e.g. `FolderReparentReverted`) | Normal |
+| `VirtualMachineSpecAdoptionConflict` | `OptimisticLockFailed` | Warning |
+| `InvariantViolationDowngrade` | `<InvariantName>` | Warning |
+| `ConcurrentAdminConsumerChange` | `WithinSkewWindow` | Warning |
+| `VirtualMachineLost` | per LeaveKind (e.g. `DestroyedOutOfBand`) | Warning |
+| `ManagedByExtensionChanged` | `Hostile` | Critical (paging) |
+| `VirtualMachineReverseReconcileShadowWindowEnded` | `ShadowWindowExpired` | Normal |
+
+All events are emitted via `record.EventRecorder`; the `Reason` field doubles as a structured key for alerting rules.
+
+### Prometheus metrics
+
+Prefix: `vmoperator_reverse_reconcile_`
+
+| Metric | Type | Labels |
+|---|---|---|
+| `events_total` | Counter | `source`, `kind`, `decision` |
+| `adoption_conflicts_total` | Counter | `path` |
+| `invariant_violations_total` | Counter | `invariant` |
+| `lost_vms_total` | Counter | `cause` |
+| `resync_duration_seconds` | Histogram | `stage` |
+| `pending_events_queue_depth` | Gauge | — |
+| `aggregator_drops_total` | Counter | `source`, `reason` |
+
+### Audit ring buffer
+
+`status.adminActivity[]` exposes the last 10 events inline on the VM object.
+Larger retention belongs in the Kubernetes event stream or an external SIEM via the
+operator's existing event sinks. The ring is bounded by `MaxItems=10` and is populated
+even during the first-enable shadow window (decisions are OBSERVE; conditions and ring
+are still written). See `model.md §1.1` for the `AdminActivityEntry` schema.
+
 ---
 
 ## Detection layer
@@ -259,3 +338,20 @@ Supporting mechanisms: vendor-event coalescing (collapse backup-window events in
 | `spec` mutated by controller (not consumer) | Admin operations must not be immediately overridden; "pause-on-drift" and "adminOverride field" alternatives both leave the consumer's mental model broken (VM stops converging or spec is split) | See design §3 trade-off table; adopt-into-spec was chosen because it keeps a single source of truth and is reversible by the consumer re-patching spec |
 | `IsReverseReconcileWrite` validation webhook bypass | The operator SA must be able to patch immutable fields (storageClass, network MAC/MTU) during adoption | Could be avoided by having a completely separate spec path (adminOverride), but that was the more complex alternative already rejected above |
 | `last-adopt-*` annotations NOT stripped by mutator for operator SA | Mutator runs before validator; stripping prevents the bypass from firing | The alternative (strip and re-add in validator) is not possible because validators are read-only |
+
+---
+
+## Risks
+
+| # | Risk | Mitigation |
+|---|---|---|
+| R1 | **Spec churn confuses GitOps users.** ADOPT writes to `spec`; `kubectl get vm -o yaml` shows a `spec.powerState` the consumer did not author. | `last-adopt-source` annotation (TTL 5 min), `VirtualMachineSpecAdopted` event, and audit ring. GitOps users with strict spec ownership must set `PauseAnnotation=true` on VMs that must not be reverse-reconciled. |
+| R2 | **Decision-engine bugs revert legitimate consumer changes.** | OBSERVE is the hardcoded fallback for unknown events. ADOPT/REVERT requires an explicit entry in the per-op decision table. New paths start in OBSERVE via `adoptablePathWhitelist` even if the decision is ADOPT — the whitelist must explicitly permit each path. |
+| R3 | **vCenter load.** New property paths and optional EventSub subscription. | Feature flag default `false`. Beta deployments measure event volume before GA. `subscribeEvents` defaults `false`. See `research.md §3` (scale analysis) for expected rates. |
+| R4 | **Event Manager subscription firehose.** Conservative whitelist (~30 event types). | Beta must measure event rate before GA. `aggregator_drops_total` metric tracks overflow. |
+| R5 | **VADP vendor SA misclassification with empty allow-list.** | Default allow-list is empty (CC3-06). All vendor SA operations degrade to OBSERVE until the `AdminReverseReconcileVendors` ConfigMap is populated. Deployments that skip this see Warning events but no breakage. |
+| R6 | **Ping-pong on OUT_OF_SCOPE ops.** Admin keeps making a change the operator keeps reverting. | Generalized ping-pong detector (`RevertPingPongMax=3` within `RevertPingPongWindow=5min`). Escalates to `VirtualMachineLost` condition rather than infinite fight. |
+| R7 | **`ManagedBy` revert fights deliberate hand-off.** v1 always reverts. | v2 adds an `abdicate` annotation path to explicitly release the VM from vm-operator management (OQ-4). Surface as Critical event and `VirtualMachineLost` condition to force human triage. |
+| R8 | **Power-state ADOPT requires Event Manager subscriber.** | Without `subscribeEvents=true` in the tuning ConfigMap, power state is OBSERVE only. This is intentional. Deployments must opt in to get ADOPT behavior for power state. |
+| R9 | **Audit retention.** Kubernetes events default to 1-hour TTL. | `status.adminActivity[]` ring (10 entries) and the operator's event stream are the primary audit surfaces. Long-term compliance audit requires a SIEM sink (external to this design). |
+| R10 | **First-enable flood.** All pre-existing VM drift is detected simultaneously on first enable. | `firstEnableShadowDuration` (default 1 hour) shadow window: all decisions OBSERVE; status/conditions populated; no spec writes or REVERT signals. See `plan.md §Rollout` and task C-03. |

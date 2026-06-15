@@ -16,7 +16,11 @@ noted.
 
 ## Phase 0 — Design review / architecture (no code)
 
-- [ ] T001 Review `spec.md` with product and resolve both `[NEEDS CLARIFICATION]` items
+- [ ] T001 Review `spec.md` with product and resolve all `[NEEDS CLARIFICATION]` items
+      (OQ-1 VADP vendor allow-list delivery; OQ-3 cross-VC auto-recovery; OQ-4 ManagedBy
+      abdicate path; OQ-5 `spec.latencySensitivity` lift; OQ-6 vcsim coverage gaps; OQ-7
+      minimum supported VC version; `subscribeEvents` v1 GA default; `adoptablePathWhitelist`
+      v1 full list); record all decisions in `plan.md` before Phase 1 code work begins
 - [ ] T002 File the JIRA epic; update `spec.md` and `plan.md` headers with `Epic: vmop-NNN`
 - [ ] T003 Resolve `adoptablePathWhitelist` v1 GA contents; record decision in `plan.md`
       and in the tuning ConfigMap default
@@ -191,8 +195,14 @@ Story C-02 — RBAC and vCenter permissions (P0):
       `VirtualMachineReverseReconcileDegraded{Reason=InsufficientVCenterPrivileges}` if
       privileges missing — `controllers/virtualmachine/reverseReconcile/controller.go`,
       `config/rbac/role.yaml`
-- [ ] T058 [vmop-NNN] Unit test: mock `AuthorizationManager` returns missing privilege →
-      `Degraded` condition set; all privileges present → no condition —
+- [ ] T058 [vmop-NNN] Implement VC version floor check at startup: query
+      `ServiceContent.About.ApiVersion`; if below configured minimum (OQ-7 decision),
+      set `VirtualMachineReverseReconcileDegraded{Reason=VCVersionInsufficient, Source=<VC>}`
+      and emit Warning Event per VC; do NOT abort startup —
+      `controllers/virtualmachine/reverseReconcile/controller.go`
+- [ ] T059 [vmop-NNN] Unit tests: mock `AuthorizationManager` returns missing privilege →
+      `Degraded` condition set; all privileges present → no condition; VC version below
+      floor → `VCVersionInsufficient` condition; above floor → no condition —
       `controllers/virtualmachine/reverseReconcile/controller_test.go`
 
 ---

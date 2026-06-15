@@ -161,6 +161,12 @@ This feature introduces an **admin-driven reverse-reconcile framework** that:
 
 ## Open questions
 
+- [NEEDS CLARIFICATION: **OQ-1 — VADP vendor allow-list delivery.** How does a fresh
+  deployment populate the `AdminReverseReconcileVendors` ConfigMap? Options: (a) default
+  empty + Helm values; (b) versioned presets shipped with the operator Helm chart;
+  (c) auto-discovery via vCenter `Extension` API. Recommendation: (b) ship versioned
+  presets; deployments override.]
+
 - [NEEDS CLARIFICATION: Should the Event Manager subscriber (`subscribeEvents`) default
   to `true` in v1 GA or remain `false` and be enabled via the tuning ConfigMap? The
   design currently defaults to `false` (requires explicit ConfigMap opt-in), which means
@@ -170,3 +176,30 @@ This feature introduces an **admin-driven reverse-reconcile framework** that:
 - [NEEDS CLARIFICATION: The `adoptablePathWhitelist` defaults to `["spec.powerState",
   "spec.minHardwareVersion"]`. What is the full v1 list? The decision should be recorded
   in `plan.md` and reflected in the ConfigMap default before GA.]
+
+- [NEEDS CLARIFICATION: **OQ-3 — Cross-VC migration auto-recovery.** v1 surfaces LOST.
+  Should v2 auto-`ImportVM` when the VM is discovered on a destination VC? Options:
+  (a) yes, auto-discover on destination VC; (b) no, require manual `ImportVM`.
+  Recommendation: (b) manual; too many topology assumptions. Surface as LOST with a clear
+  runbook.]
+
+- [NEEDS CLARIFICATION: **OQ-4 — `ManagedBy` abdicate path (v2).** Explicit release of
+  a VM from vm-operator management. What is the signal? Options: (a) `PausedVMLabelKey=
+  admin+abdicate`; (b) new annotation `vmoperator.vmware.com/abdicate: true`; (c) a new
+  `VirtualMachineAbdicate` subresource. Recommendation: (b) annotation; consistent with
+  existing pattern. Out of scope for v1.]
+
+- [NEEDS CLARIFICATION: **OQ-5 — `spec.latencySensitivity` lift.** Should this be
+  promoted to a first-class spec field in v2? Options: (a) yes (requires API change);
+  (b) keep as a drift condition indefinitely. Recommendation: (a) in v2; the
+  OBSERVE+drift condition is the v1 holding pattern.]
+
+- [NEEDS CLARIFICATION: **OQ-6 — vcsim coverage gaps.** `disabledMethod`, `customValue`,
+  and some HA event types are not modeled in vcsim. Test strategy for these paths?
+  Options: (a) fake/mock adapters in unit tests only; (b) real VC in CI for specific
+  paths; (c) vcsim extension PRs. Recommendation: (a) for v1; (c) as follow-up.]
+
+- [NEEDS CLARIFICATION: **OQ-7 — Minimum supported VC version.** The event whitelist and
+  tagging APIs reference VC 7.0+ event types. Options: (a) VC 7.0 U3; (b) VC 8.0 GA.
+  Define explicitly in feature-flag documentation; startup self-check emits
+  `VirtualMachineReverseReconcileDegraded{Reason=VCVersionInsufficient}` below floor.]
