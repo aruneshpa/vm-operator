@@ -30,8 +30,8 @@ This creates two failure modes:
 This feature introduces an **admin-driven reverse-reconcile framework** that:
 1. **Detects** admin-initiated vSphere changes through the extended property-collector
    watcher, an Event Manager subscriber, and a periodic full-property backstop.
-2. **Classifies** each change as infrastructure-driven (DRS/HA/SDRS/vCLS),
-   vendor-driven (VADP, NSX, SRM), or admin-driven (human).
+2. **Classifies** each change as infrastructure-driven (DRS/HA/SDRS/vCLS) or
+   admin-driven (human or backup vendor — vendor distinction not in v1; see §v1 scope).
 3. **Decides** per operation whether to observe (status only), adopt into `vm.Spec`
    (reverse-reconcile desired state), or revert (re-assert the consumer's intent).
 4. **Coexists** with the existing `PauseVMExtraConfigKey` / `PausedVMLabelKey` break-glass
@@ -46,13 +46,15 @@ This feature introduces an **admin-driven reverse-reconcile framework** that:
 - MUST detect VM destruction or unregistration out-of-band and surface a
   `VirtualMachineLost` condition without deleting the Kubernetes CR.
 - MUST detect admin-initiated folder reparent (out of namespace folder) and resource-pool
-  reassignment and revert them to enforce tenant isolation.
+  reassignment and surface a `NamespacePlacementDrift` condition; does NOT revert (no
+  reconcile code path exists for placement correction; action is deliberately admin-initiated).
 - MUST detect `ManagedBy` extension key removal and revert it; emit a Critical event if
   the revert fails.
 - MUST classify DRS/HA/SDRS/vCLS changes as infrastructure-driven and observe without
   spec mutation, so infra operations do not generate spurious drift events.
-- MUST classify VADP backup-vendor operations as vendor-driven and observe without
-  disrupting snapshot state.
+- MUST classify VADP backup-vendor operations as OBSERVE (snapshot create/remove/revert
+  is OBSERVE for all sources; `backup-proxy=true` annotation prevents status mutation for
+  hot-add disk transport).
 - MUST emit structured Kubernetes Events, conditions, and an audit ring buffer
   (`status.adminActivity[]`) so consumers can observe every admin action.
 - MUST guard all invariants: class-defined CPU/memory cannot be adopted; storage-class
@@ -123,15 +125,26 @@ This feature introduces an **admin-driven reverse-reconcile framework** that:
   `principalName`, `path`, and `timestamp` populated, and the ring is bounded to 10
   entries (FIFO eviction).
 
-### US5 — Infra admin: folder reparent is reverted
+### US5 — Infra admin: folder reparent or resource-pool reassignment is surfaced
 
 - **Given** a `VirtualMachine` CR managed in namespace folder `ns-folder`,
   **when** the infra admin moves the VM to a different vCenter folder,
-  **then** the operator issues `MoveIntoFolder_Task` to restore the VM to `ns-folder`
-  and emits a `VirtualMachineAdminChangeReverted` Event.
-- **Given** the admin repeats the reparent more than 3 times in 5 minutes,
-  **then** a `VirtualMachineLost{Reason=FolderRevertPingPong}` condition is set instead
-  of continuing to revert.
+  **then** a `NamespacePlacementDrift` condition is set on the CR, a Warning Event is
+  emitted, and `status.vsphereObserved` reflects the new parent. The operator does NOT
+  attempt to move the VM back.
+- **Given** a `VirtualMachine` CR managed in namespace resource pool `ns-rp`,
+  **when** the infra admin moves the VM to a different resource pool,
+  **then** the same `NamespacePlacementDrift` condition and Warning Event are set. The
+  operator does NOT attempt to move the VM back.
+
+**Rationale:** vm-operator has no reconcile path that moves an existing VM into a
+namespace folder or RP (placement happens once, at creation). A REVERT would require the
+reverse-reconcile controller to call `MoveIntoFolder_Task` directly, violating the
+design principle that only the standard reconciler makes vSphere writes. More
+importantly, this is a deliberate admin action requiring elevated vCenter privilege — the
+tenant isolation boundary is already a vCenter RBAC concern, not something vm-operator
+can enforce by moving the object back. The `NamespacePlacementDrift` condition surfaces
+the drift so humans can triage.
 
 ### US6 — Consumer: concurrent admin and consumer change
 
@@ -142,13 +155,41 @@ This feature introduces an **admin-driven reverse-reconcile framework** that:
 
 ### US7 — Infra admin: VADP backup snapshot cycle is not disrupted
 
-- **Given** a VADP backup vendor creates and removes snapshots on a VM,
-  **when** the vendor's principal name matches the `vmoperator-reverse-reconcile-vendors`
-  ConfigMap allow-list,
-  **then** the operator classifies the changes as `VENDOR_DRIVEN`, performs OBSERVE only,
-  and does NOT create or delete any `VirtualMachineSnapshot` CR.
-- **Given** the vendor ConfigMap is absent,
-  **then** VENDOR-class decisions degrade to OBSERVE and a Warning Event is emitted.
+- **Given** a VADP backup vendor creates and removes snapshots on a VM (regardless of
+  the vendor's principal name),
+  **then** the operator performs OBSERVE only for snapshot create/remove/revert
+  operations — it does NOT create or delete any `VirtualMachineSnapshot` CR, because
+  snapshot operations are OBSERVE for all source classifications.
+- **Given** a backup vendor uses hot-add transport and the VM has the
+  `backup-proxy=true` annotation,
+  **then** disk attach/detach events on that VM produce no status mutations
+  (the `backup-proxy` annotation is the only vendor-awareness mechanism required).
+
+### US9 — Infra admin: ManagedBy extension key is removed
+
+- **Given** a `VirtualMachine` CR with `config.managedBy.extensionKey=vmoperator.vmware.com`,
+  **when** an infra admin (or hostile actor) removes or overwrites the `ManagedBy` field
+  via vCenter,
+  **then** the operator immediately issues `ReconfigVM_Task` to restore
+  `config.managedBy`, emits a `ManagedByExtensionChanged{Reason=Hostile}` Critical Event
+  (page-worthy), and sets a `VirtualMachineAdminPaused` condition during the revert.
+- **Given** the revert fails (e.g., `DisableMethods` is blocking `ReconfigVM`),
+  **then** a `VirtualMachineLost{Reason=ManagedByLost}` condition is set and no further
+  reverse-reconcile decisions are made for that VM until a human resolves it.
+
+### US10 — Infra admin: direct hardware reconfigure is reverted (invariant guard)
+
+- **Given** a `VirtualMachine` CR with a class-defined CPU count,
+  **when** an infra admin directly reconfigures the VM's CPU or memory to a value that
+  differs from the class definition (`spec.className`),
+  **then** the operator triggers a REVERT (injects `GenericEvent` for the standard
+  reconciler), emits an `InvariantViolationDowngrade` Warning Event, and sets an
+  appropriate drift condition; the standard reconciler re-applies the class-defined
+  values.
+- **Given** an infra admin strips the encryption class or performs a `ReconfigVM` that
+  would change storage-class assignment,
+  **then** the operator triggers the same REVERT path; the immutable fields are
+  restored on the next standard-reconcile pass.
 
 ### US8 — Operator: first-enable shadow window prevents flood
 
@@ -159,13 +200,67 @@ This feature introduces an **admin-driven reverse-reconcile framework** that:
 
 ---
 
+---
+
+## v1 scope
+
+To avoid a multi-quarter project, v1 ships only what is needed to eliminate the primary
+admin-operator conflict and provide safe rollout. Everything else is deferred or dropped.
+
+### In scope for v1
+
+| Item | Priority | Why |
+|---|---|---|
+| Property-collector extension (~12 new paths) | P0 | Foundation for all detection |
+| Periodic full-property resync (backstop) | P0 | ESXi-direct ops, missed events |
+| Event Manager subscriber | P0 | Required for power-state ADOPT |
+| Power-state ADOPT (US1) | P0 | #1 user pain: ping-pong on admin power-off |
+| VM LOST detection (US2) | P0 | Confusing dangling CRs |
+| DRS/HA OBSERVE without spec mutation (US3) | P0 | Spurious drift events |
+| Folder + RP OBSERVE + `NamespacePlacementDrift` condition (US5) | P0 | No REVERT code path; deliberate admin action; surface drift for human triage |
+| ManagedBy REVERT + Critical alert (US9) | P0 | Security |
+| Shadow window on first enable (US8) | P0 | Safe rollout |
+| Audit ring `status.adminActivity[]` (US4) | P0 | Observability |
+| Basic conditions (9 new condition types) | P0 | Required by US1–US10 |
+| `backup-proxy=true` annotation (US7) | P1 | Needed before GA if backup vendors present |
+| Invariant guards: CPU/mem/encryption REVERT (US10) | P1 | Correctness; ops are rare |
+
+### Deferred to v2
+
+| Item | Reason for deferral |
+|---|---|
+| FT status fields (`VirtualMachineFTStatus`) | Observability only; no decisions; adds API surface |
+| HA status fields (`VirtualMachineHAStatus.LastFailoverTime`) | Same — informational; no decisions |
+| `AffinityDrift` condition (DRS rule drift) | Rarely actionable; no REVERT path |
+| `StorageClassDrift` condition (SDRS/SPBM drift) | Rarely actionable; REVERT disabled anyway |
+| Rename REVERT | Rare; low pain |
+| `spec.latencySensitivity` lift to first-class spec field | API change; v2 only |
+| Cross-VC migration auto-recovery (`ImportVM`) | Too many topology assumptions |
+| `ManagedBy` abdicate annotation path | v2; v1 always reverts |
+
+### Dropped (not deferred)
+
+| Item | Reason |
+|---|---|
+| `AdminReverseReconcileVendors` ConfigMap | VENDOR classification collapsed into ADMIN (see below) |
+| VENDOR source class in classifier | All VENDOR decisions are identical to ADMIN for the affected ops; snapshot/disk ops are OBSERVE regardless |
+| Vendor-event ring coalescing | Cosmetic; ring still correct without it |
+
+**Why VENDOR is collapsed into ADMIN:** The per-op decision table produces the same
+outcome (OBSERVE) for every operation where a backup vendor is involved. The only
+structural difference was audit-ring coalescing, which is cosmetic. Collapsing removes
+the `AdminReverseReconcileVendors` ConfigMap, heuristic #6 in the classifier, the
+vendor allow-list bootstrap problem (OQ-1), and 2 tasks. The `backup-proxy=true`
+annotation handles the one VADP-specific case (hot-add disk transport) without requiring
+vendor classification.
+
+---
+
 ## Open questions
 
-- [NEEDS CLARIFICATION: **OQ-1 — VADP vendor allow-list delivery.** How does a fresh
-  deployment populate the `AdminReverseReconcileVendors` ConfigMap? Options: (a) default
-  empty + Helm values; (b) versioned presets shipped with the operator Helm chart;
-  (c) auto-discovery via vCenter `Extension` API. Recommendation: (b) ship versioned
-  presets; deployments override.]
+- [RESOLVED: **OQ-1 — VADP vendor allow-list delivery.** Dropped. VENDOR source class
+  and `AdminReverseReconcileVendors` ConfigMap are not part of v1 scope. The
+  `backup-proxy=true` annotation is the only VADP-awareness mechanism required.]
 
 - [NEEDS CLARIFICATION: Should the Event Manager subscriber (`subscribeEvents`) default
   to `true` in v1 GA or remain `false` and be enabled via the tuning ConfigMap? The

@@ -111,10 +111,11 @@ Story D-04 — Periodic full-property resync (P0):
 
 Story E-01 — Source classifier (P0):
 
-- [ ] T040 [vmop-NNN] Implement `ClassifySource()` with all 8 heuristics; safe-default for
-      UNKNOWN + power-state — `controllers/virtualmachine/reverseReconcile/classifier.go`
-- [ ] T041 [vmop-NNN] Table-driven unit tests for all 8 heuristics; empty vendor allow-list
-      safe-default test — `controllers/virtualmachine/reverseReconcile/classifier_test.go`
+- [ ] T040 [vmop-NNN] Implement `ClassifySource()` with 7 heuristics (VENDOR class dropped;
+      see `spec.md §v1 scope`); safe-default for UNKNOWN + power-state →
+      `controllers/virtualmachine/reverseReconcile/classifier.go`
+- [ ] T041 [vmop-NNN] Table-driven unit tests for all 7 heuristics —
+      `controllers/virtualmachine/reverseReconcile/classifier_test.go`
 
 Story E-02 — Pause and suppression check (P0):
 
@@ -127,9 +128,11 @@ Story E-02 — Pause and suppression check (P0):
 
 Story E-03 — Per-op decision table (P0):
 
-- [ ] T044 [vmop-NNN] Implement handler dispatch table and all per-op handlers: power state,
-      placement (vMotion, folder, RP, storage vMotion), hardware, snapshots, lifecycle (LOST,
-      ManagedBy, template), NIC/disk, FT, DRS rules, scheduled tasks, disable methods —
+- [ ] T044 [vmop-NNN] Implement handler dispatch table and all per-op handlers: power state
+      (ADOPT); placement (vMotion → OBSERVE, folder/RP → OBSERVE+NamespacePlacementDrift,
+      storage vMotion → OBSERVE); hardware (invariant guards → REVERT); snapshots (OBSERVE);
+      lifecycle (LOST: unregister/destroy; ManagedBy → REVERT+Critical; template → REVERT);
+      NIC/disk (P1); DRS/FT/HA (OBSERVE, deferred conditions) —
       `controllers/virtualmachine/reverseReconcile/decisions.go`
 - [ ] T045 [vmop-NNN] Table-driven unit tests for every §6.4 catalog row —
       `controllers/virtualmachine/reverseReconcile/decisions_test.go`
@@ -158,7 +161,7 @@ Story E-06 — Decision executor (P0):
 
 - [ ] T050 [vmop-NNN] Implement OBSERVE executor: `status.VSphereObserved` update;
       `status.adminActivity[]` ring buffer (FIFO, bounded by `auditRingSize`); K8s event
-      emit; vendor-event coalescing; status echo cache —
+      emit; status echo cache (vendor-event coalescing dropped; VENDOR class not in v1) —
       `controllers/virtualmachine/reverseReconcile/executor.go`
 - [ ] T051 [vmop-NNN] Implement ADOPT executor: idempotency token (`sha256` adoptKey);
       `MergeFromWithOptimisticLock`; split retry by error class (Conflict vs Forbidden);
@@ -365,15 +368,9 @@ Story SST-01 — Snapshot status model extension [P1]:
       `api/v1alpha6/virtualmachine_types.go`,
       `controllers/virtualmachine/virtualmachine_controller.go`
 
-Story SST-02 — Vendor allow-list ConfigMap bootstrap [P1]:
-
-- [ ] T121 [P1] [vmop-NNN] Author default `vmoperator-reverse-reconcile-vendors` ConfigMap
-      Helm template with example vendor principal-name patterns (Veeam, Commvault, Veritas,
-      Cohesity, Zerto) —
-      `config/manager/vmoperator-reverse-reconcile-vendors.yaml`
-- [ ] T122 [P1] [vmop-NNN] Wire live-reload of vendor ConfigMap into source classifier;
-      absent ConfigMap → Warning event; VENDOR → OBSERVE —
-      `controllers/virtualmachine/reverseReconcile/classifier.go`
+~~Story SST-02 — Vendor allow-list ConfigMap bootstrap~~ **DROPPED** — VENDOR source
+class removed from v1 scope. T121 and T122 are not implemented. See `spec.md §v1 scope`
+for rationale. If a future v2 reintroduces vendor classification, restore these tasks.
 
 Final polish (P0):
 

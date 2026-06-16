@@ -29,69 +29,74 @@ for:
 | `CONSUMER_ONLY` | Should be exposed only through the Kubernetes API; revert if admin does it |
 | `OUT_OF_SCOPE` | Framework does not react (e.g., ESXi-direct, BIOS settings) |
 
-### 1.3 Per-op decision table (§6.4 of design)
+### 1.3 Per-op decision table
 
-| Op (catalog ID) | INFRA | VENDOR | ADMIN |
+Source is either INFRA (automated infrastructure) or ADMIN (everything else, including
+backup vendors). The VENDOR source class was dropped from v1; see `spec.md §v1 scope`.
+
+| Op (catalog ID) | INFRA | ADMIN | v1 scope |
 |---|---|---|---|
-| Power off / on / suspend / reset (ADM-01..03, 53) | (n/a) | (n/a) | ADOPT (`spec.powerState`); requires Event Manager subscriber |
-| Snapshot create / remove / revert (ADM-04..06) | (n/a) | OBSERVE (Unmanaged) | OBSERVE (Unmanaged) |
-| Consolidate / consolidation-needed (ADM-07, 51) | (n/a) | (n/a) | OBSERVE (info condition) |
-| vMotion (ADM-08) | OBSERVE (update `status.vsphereObserved.host`) | (n/a) | OBSERVE |
-| Storage vMotion (ADM-09, 50) | OBSERVE (update `status.vsphereObserved`) | (n/a) | OBSERVE + `StorageClassDrift` condition; never REVERT (SDRS ping-pong) |
-| Folder reparent (ADM-10, 44) | (n/a) | (n/a) | REVERT (`MoveIntoFolder_Task` back to namespace folder) |
-| Resource Pool reassignment (ADM-11, 45) | (n/a) | (n/a) | REVERT (move back to namespace RP) |
-| Cross-VC migration (ADM-59) | (n/a) | (n/a) | LOST |
-| Host maintenance / datastore decom (ADM-61, 62) | OBSERVE (info condition) | (n/a) | (n/a) |
-| NIC disconnect (ADM-12) | (n/a) | (n/a) | OBSERVE if `admin-managed-nics` annotation present; else REVERT |
-| NIC backing change (ADM-13) | (n/a) | (n/a) — NSX acts via tags only, not backing | OBSERVE if `admin-managed-nics`; else REVERT |
-| NIC add / remove (ADM-14) | (n/a) | (n/a) | OBSERVE if `admin-managed-devices` lists key; else REVERT |
-| Tag changes (ADM-20, 37) | OUT OF SCOPE | OUT OF SCOPE | OUT OF SCOPE — vSphere tags are admin-only; not surfaced to consumer persona |
-| Disk add / remove (ADM-15) | (n/a) | OBSERVE (no status mutation if `backup-proxy=true`); else OBSERVE as Classic | OBSERVE as Classic if non-PVC; REVERT if PVC-backed disk admin-removed |
-| CD-ROM attach (ADM-16) | (n/a) | (n/a) | OBSERVE if `admin-managed-devices`; else REVERT |
-| SPBM profile change (ADM-46) | OBSERVE | (n/a) | OBSERVE + `StorageClassDrift` condition |
-| Rename (ADM-17) | (n/a) | (n/a) | REVERT (re-set `config.name`) |
-| Custom Attributes (ADM-19, 38) | (n/a) | (n/a) | OBSERVE (`status.vsphereObserved.customAttributes[]`) |
-| Direct CPU/mem reconfigure (ADM-21) | (n/a) | (n/a) | REVERT (class invariant) |
-| vTPM add/remove (ADM-22) | (n/a) | (n/a) | REVERT (class invariant) |
-| Encryption rekey/decrypt (ADM-23) | (n/a) | (n/a) | REVERT (EncryptionClass invariant) |
-| HW version upgrade (ADM-29) | (n/a) | (n/a) | OBSERVE if observed ≥ `spec.minHardwareVersion`; else REVERT |
-| Boot options (ADM-30) | (n/a) | (n/a) | REVERT |
-| ManagedBy change (ADM-58) | (n/a) | (n/a) | REVERT (re-set `ManagedByExtensionKey`); if fails → `VirtualMachineLost` + Critical alert |
-| Unregister (ADM-26, 43) | (n/a) | (n/a) | LOST |
-| Destroy (ADM-27) | (n/a) | (n/a) | LOST |
-| Mark as template / VM (ADM-28, 42) | (n/a) | (n/a) | REVERT (`MarkAsVirtualMachine`) |
-| FT (ADM-31) | OBSERVE (`status.vsphereObserved.faultTolerance`); evict secondary MoRef on role-swap | (n/a) | OBSERVE |
-| HA override (ADM-32) | (n/a) | (n/a) | OBSERVE (`status.vsphereObserved.haProtection`) |
-| HA failover (ADM-33) | OBSERVE (info condition + `LastHAFailoverTime`) | (n/a) | (n/a) |
-| DRS rules (ADM-35) | (n/a) | (n/a) | OBSERVE; `AffinityDrift` if rule not authored by `vmop-vmg-<uid>-` prefix |
-| Scheduled tasks (ADM-41) | (n/a) | (n/a) | OBSERVE + `ScheduledTaskActive` condition |
-| ManagedBy change (ADM-58) | (n/a) | (n/a) | REVERT; Critical alert if fails |
-| Direct ESXi (ADM-60) | (n/a) | (n/a) | OBSERVE; periodic resync is detection mechanism |
+| Power off / on / suspend / reset (ADM-01..03, 53) | (n/a) | ADOPT (`spec.powerState`); requires Event Manager subscriber | P0 |
+| Snapshot create / remove / revert (ADM-04..06) | (n/a) | OBSERVE (Unmanaged; no snapshot CR created/deleted) | P0 (OBSERVE default) |
+| vMotion (ADM-08) | OBSERVE (`status.vsphereObserved.host` updated) | OBSERVE | P0 |
+| Storage vMotion (ADM-09, 50) | OBSERVE | OBSERVE + `StorageClassDrift` condition (deferred v2) | v2 |
+| Folder reparent (ADM-10, 44) | (n/a) | OBSERVE + `NamespacePlacementDrift` condition; no REVERT (no reconcile path for folder placement; deliberate admin action) | P0 |
+| Resource Pool reassignment (ADM-11, 45) | (n/a) | OBSERVE + `NamespacePlacementDrift` condition; no REVERT (same rationale as folder reparent) | P0 |
+| Cross-VC migration (ADM-59) | (n/a) | LOST | P0 |
+| Host maintenance / datastore decom (ADM-61, 62) | OBSERVE (info condition) | (n/a) | P0 (OBSERVE default) |
+| NIC disconnect (ADM-12) | (n/a) | OBSERVE if `admin-managed-nics` present; else REVERT | P1 |
+| NIC backing change (ADM-13) | (n/a) | OBSERVE if `admin-managed-nics`; else REVERT | P1 |
+| NIC add / remove (ADM-14) | (n/a) | OBSERVE if `admin-managed-devices`; else REVERT | P1 |
+| Tag changes (ADM-20, 37) | OUT OF SCOPE | OUT OF SCOPE — vSphere tags are admin-only; not surfaced to consumer | deferred |
+| Disk add / remove (ADM-15) | (n/a) | OBSERVE if `backup-proxy=true` or non-PVC; REVERT if PVC-backed disk admin-removed | P1 |
+| CD-ROM attach (ADM-16) | (n/a) | OBSERVE if `admin-managed-devices`; else REVERT | P1 |
+| SPBM profile change (ADM-46) | OBSERVE | OBSERVE + `StorageClassDrift` condition | v2 |
+| Rename (ADM-17) | (n/a) | REVERT (re-set `config.name`) | v2 |
+| Custom Attributes (ADM-19, 38) | (n/a) | OBSERVE (`status.vsphereObserved.customAttributes[]`) | P0 (OBSERVE default) |
+| Direct CPU/mem reconfigure (ADM-21) | (n/a) | REVERT (class invariant) | P1 |
+| vTPM add/remove (ADM-22) | (n/a) | REVERT (class invariant) | P1 |
+| Encryption rekey/decrypt (ADM-23) | (n/a) | REVERT (EncryptionClass invariant) | P1 |
+| HW version upgrade (ADM-29) | (n/a) | OBSERVE if observed ≥ `spec.minHardwareVersion`; else REVERT | P1 |
+| Boot options (ADM-30) | (n/a) | REVERT | P1 |
+| ManagedBy change (ADM-58) | (n/a) | REVERT; Critical alert if fails → LOST | P0 |
+| Unregister (ADM-26, 43) | (n/a) | LOST | P0 |
+| Destroy (ADM-27) | (n/a) | LOST | P0 |
+| Mark as template / VM (ADM-28, 42) | (n/a) | REVERT (`MarkAsVirtualMachine`) | P1 |
+| FT (ADM-31) | OBSERVE (`status.vsphereObserved.faultTolerance`) | OBSERVE | v2 |
+| HA override (ADM-32) | (n/a) | OBSERVE | v2 |
+| HA failover (ADM-33) | OBSERVE (condition + `LastHAFailoverTime`) | (n/a) | v2 |
+| DRS rules (ADM-35) | (n/a) | OBSERVE + `AffinityDrift` if rule not `vmop-vmg-<uid>-` prefix | v2 |
+| Scheduled tasks (ADM-41) | (n/a) | OBSERVE + `ScheduledTaskActive` condition | P1 |
+| Direct ESXi (ADM-60) | (n/a) | OBSERVE; periodic resync is the detection mechanism | P0 (OBSERVE default) |
 
 ---
 
 ## 2. Source classification heuristics
 
-The classifier produces `Source ∈ {INFRA, VENDOR, ADMIN, UNKNOWN}` from 8 heuristics
-applied in order:
+The classifier produces `Source ∈ {INFRA, ADMIN, UNKNOWN}` from 7 heuristics applied
+in order. The `VENDOR` source class is not part of v1 (see `spec.md §v1 scope`).
 
 1. **Leave event** → `INFRA`.
 2. **DRS vMotion** — `DrsVmMigratedEvent` or `DrsVmPoweredOnEvent` in paired-event cache → `INFRA`.
 3. **SDRS** — `VmRelocatedEvent` with principal matching `InfraPrincipalPatterns` regex list → `INFRA(SDRS)`.
 4. **HA** — `VmDasBeingResetEvent` / `VmFailoverEvent` in cache → `INFRA(HA)`.
 5. **WCP-internal** — principal matches WCP patterns (`^wcp-.*$`, `^wcpsvc@.*$`, etc.) → `INFRA`.
-6. **Vendor-driven** — principal matches `vmoperator-reverse-reconcile-vendors` ConfigMap → `VENDOR`.
-7. **Empty-principal placement** — `PrincipalName == ""` AND `Path ∈ {summary.runtime.host, config.files.vmPathName, resourcePool}` → `INFRA` (DRS/SDRS/DPM).
-8. **Default** → `ADMIN`.
+6. **Empty-principal placement** — `PrincipalName == ""` AND `Path ∈ {summary.runtime.host, config.files.vmPathName, resourcePool}` → `INFRA` (DRS/SDRS/DPM).
+7. **Default** → `ADMIN`.
 
 Safe-default: `UNKNOWN` + power-state-only batch → OBSERVE (never ADOPT without a corroborating event).
 
-**Why tag-based vendor classification was removed (CC3-07):** vSphere tags do not carry a
-`created_by` field. More importantly, VM Operator maintains the invariant that vSphere
-tags applied by admins are not surfaced to the DevOps/consumer persona. Since tags are
-admin-only and the only §6.4 decision for tag changes is OBSERVE, a tag poller would add
-cost (~500 API calls per 5-min interval at 40k VMs) for zero actionable signal. Vendor
-classification relies entirely on `Event.UserName` principal matching (heuristics #3–#6).
+**Why VENDOR was dropped:** For every op where a backup vendor is the actor, the per-op
+decision is OBSERVE regardless (snapshots, disk add/remove, CBT toggle). The only
+structural difference was audit-ring coalescing (cosmetic) and power-state handling
+during cold backups (rare with modern VADP). The `backup-proxy=true` annotation handles
+the hot-add disk transport case independently. Keeping VENDOR required a ConfigMap,
+allow-list bootstrap (OQ-1), an extra classifier heuristic, and vendor-coalescing logic —
+all for zero behavioral difference on the ops that matter.
+
+**Why tag-based classification was removed (CC3-07):** vSphere tags do not carry a
+`created_by` field, and tag changes are OBSERVE for all sources. A tag poller would add
+~500 API calls per 5-min interval at 40k VMs for zero actionable signal.
 
 ---
 
@@ -261,9 +266,9 @@ issues were identified and resolved.
 | **R23** `lookupNamespacedName` returns wrong VM if MoRefs collide across VC restarts | Existing `status.uniqueID` index protection; no new MoRef-keyed caches |
 | **R24** Two ADOPTs on same path within milliseconds | `MergeFromWithOptimisticLock`; only one wins; other retries with fresh fetch + re-evaluation |
 | **R25** Controller crashes after ADOPT but before status/condition write | Idempotency token (`last-adopt-event-uid = sha256(MoRef+setVersion+path+value)`) ensures re-processing same batch is no-op; status write is idempotent |
-| **R26** VADP vendor SA mis-allow-listed → classified as ADMIN | With empty default allow-list: snapshot ops are OBSERVE; disk/NIC/method ops emit Warning but do not REVERT |
+| **R26** VADP backup vendor SA classified as ADMIN (VENDOR class not in v1) | Snapshot ops → OBSERVE (per-op decision); disk ops → OBSERVE or REVERT depending on PVC-backing; backup vendors should set `PauseVMExtraConfigKey` during cold backup to avoid power-state ADOPT |
 | **R27** Consumer and admin patch `spec.powerState` in same microsecond | Same end-state in common case; timestamp comparison resolves; audit ring records concurrent change with source attribution |
-| **R28** REVERT ping-pong on any op (generalized: folder reparent, RP reassignment, storage relocate) | Track revert count per `(VM, op)` in `RevertPingPongWindow` (default 5min); after `RevertPingPongMax=3` reverts → `VirtualMachineLost{Reason=<Op>RevertPingPong}`; counter resets after 1hr |
+| **R28** REVERT ping-pong on any REVERT-producing op (e.g., ManagedBy change, hardware invariant violation, template flip) | Track revert count per `(VM, op)` in `RevertPingPongWindow` (default 5min); after `RevertPingPongMax=3` reverts → `VirtualMachineLost{Reason=<Op>RevertPingPong}`; counter resets after 1hr. Folder reparent and RP reassignment use OBSERVE+drift, not REVERT, so they do not trigger this counter. |
 | **R29** EventSub delivers `VmReconfiguredEvent` BEFORE paired property change | Paired-event cache `PairWindow=60s`; event cached until property change arrives; if property arrives first, cache miss falls through to principal-based heuristics 4-9 |
 | **R30** SDRS storage ping-pong (SDRS moves VM back after operator's corrective relocate) | REVERT for storage vMotion disabled; OBSERVE + `StorageClassDrift` condition only; admin must resolve SPBM policy conflict manually |
 | **R31** FT secondary VM floods `watcher.Cache` | Secondary MoRef dropped at entry filter (MoRef != `status.uniqueID`); secondary NOT stored in `watcher.Cache` |
@@ -302,16 +307,22 @@ func handlePowerState(ctx context.Context, e *AdminEvent, vm *vmopv1.VirtualMach
 }
 ```
 
-### Folder reparent (ADM-10/44)
+### Folder reparent / RP reassignment (ADM-10/11/44/45)
 
 ```go
 func handleParent(ctx context.Context, e *AdminEvent, vm *vmopv1.VirtualMachine) Decision {
-    canonical := zoneFolderMoIDFor(vm)
+    canonical := zoneFolderMoIDFor(vm) // or zoneRPMoIDFor(vm)
     observed := e.NewValue.(MoRef)
     if observed == canonical {
         return Decision{Kind: OBSERVE}
     }
-    return Decision{Kind: REVERT, RevertReason: "FolderOutsideNamespace", VimAction: "MoveIntoFolder", Target: canonical}
+    // No REVERT: vm-operator has no reconcile path for folder/RP placement correction,
+    // and this is a deliberate admin action. Surface drift only.
+    return Decision{
+        Kind:      OBSERVE,
+        Condition: NamespacePlacementDrift,
+        Message:   fmt.Sprintf("VM moved to %s; expected %s", observed, canonical),
+    }
 }
 ```
 
@@ -362,8 +373,7 @@ func handleLeave(ctx context.Context, e *AdminEvent, vm *vmopv1.VirtualMachine) 
 | **OBSERVE** | Update status / condition / event only; do not touch spec or vSphere |
 | **LOST** | The vSphere VM has disappeared; surface a `VirtualMachineLost` condition |
 | **INFRA-driven** | Source = DRS, SDRS, HA, FDM, vCLS, DPM, etc.; non-human automation |
-| **VENDOR-driven** | Source = VADP / NSX / SRM / backup-vendor service account |
-| **ADMIN-driven** | Source = human admin via vSphere UI / SDK / SOAP / VAPI |
+| **ADMIN-driven** | Source = any non-INFRA actor; includes human admins AND backup vendors (VENDOR class collapsed into ADMIN for v1; see `spec.md §v1 scope`) |
 | **Catalog ID (ADM-NN)** | Identifier from `00-admin-operations-analysis.md` (62-op catalog) |
 | **MoRef** | `vim.ManagedObjectReference` |
 | **Leave event** | Property Collector `ObjectUpdateKindLeave` for a VM MoRef |

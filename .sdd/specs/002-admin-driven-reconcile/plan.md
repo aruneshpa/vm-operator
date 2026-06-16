@@ -170,7 +170,7 @@ live in the `vmoperator-reverse-reconcile-config` ConfigMap (§8 of design doc; 
 // +kubebuilder:rbac:groups=vmoperator.vmware.com,resources=virtualmachines/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vmoperator.vmware.com,resources=virtualmachines/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch  // for tuning ConfigMap and shadow-window state ConfigMap
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 ```
 
@@ -288,14 +288,14 @@ Three sources feed the unified `AdminEventBatch` aggregator channel:
 
 The decision engine pipeline for each `AdminEventBatch`:
 
-1. **Source classification** — 8 heuristics (Leave → INFRA; DRS events → INFRA; SDRS principal → INFRA; HA events → INFRA; WCP service account → INFRA; VADP vendor principal → VENDOR; empty-principal placement → INFRA; else → ADMIN). Safe default: UNKNOWN + power-state → OBSERVE.
+1. **Source classification** — 7 heuristics (Leave → INFRA; DRS events → INFRA; SDRS principal → INFRA; HA events → INFRA; WCP service account → INFRA; empty-principal placement → INFRA; else → ADMIN). VENDOR source class dropped; see `spec.md §v1 scope`. Safe default: UNKNOWN + power-state → OBSERVE.
 2. **Pause / suppression check** — `PauseVMExtraConfigKey=True`, `PausedVMLabelKey`, `PauseAnnotation`, import/restore/failover annotation window, first-enable shadow window → all force OBSERVE.
-3. **Per-op decision** — handler dispatch table keyed by property path / event leaf-type; implements the ADMIN/INFRA/VENDOR columns from the operations catalog.
+3. **Per-op decision** — handler dispatch table keyed by property path / event leaf-type; implements the ADMIN/INFRA columns from the operations catalog (VENDOR collapsed into ADMIN). Folder reparent and RP reassignment produce OBSERVE + `NamespacePlacementDrift` condition, not REVERT — no reconcile path exists for placement correction and the action is deliberately admin-initiated.
 4. **Invariant guards** — class invariant, encryption class, storage-class immutability, `minHardwareVersion` monotonicity, webhook approval, ExtraConfig reserved-prefix guard.
 5. **Conflict resolution** — timestamp-based last-writer-wins with `conflictSkewSeconds` (default 30s) tolerance; `tK8s` from `*Synced` condition `LastTransitionTime`.
 6. **Execution** — OBSERVE (status + ring + event), ADOPT (idempotency token + optimistic-lock patch + retry), REVERT (`GenericEvent` injection), LOST (condition + event + preserve CR).
 
-Supporting mechanisms: vendor-event coalescing (collapse backup-window events in ring); status echo cache (suppress redundant K8s patches on DRS churn); ping-pong detector (escalate to LOST after N REVERTs in a window).
+Supporting mechanisms: status echo cache (suppress redundant K8s patches on DRS churn); ping-pong detector (escalate to LOST after N REVERTs in a window). Vendor-event coalescing dropped (VENDOR source class not in v1 scope; see `spec.md §v1 scope`).
 
 ---
 
