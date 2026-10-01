@@ -29,6 +29,7 @@ RUN tdnf install -y \
 # ../../api
 # ../../external/*
 # ../../pkg/{backup/api,constants/testlabels}
+# ../../mcp
 #
 # Go requires the go.mod of each replace target to be present before go mod download
 # can succeed. These directories are stable so keeping them here preserves the module
@@ -38,6 +39,7 @@ COPY api/ ./api/
 COPY external/ ./external/
 COPY pkg/backup/api/ ./pkg/backup/api/
 COPY pkg/constants/testlabels/ ./pkg/constants/testlabels/
+COPY mcp/go.mod mcp/go.sum ./mcp/
 COPY test/e2e/go.mod test/e2e/go.sum ./test/e2e/
 
 # Download all external dependencies. Only re-runs when the manifests above change.
@@ -50,6 +52,7 @@ FROM builder-base AS builder-e2e
 # Copy volatile source. This layer is busted on every code change, but the
 # toolchain install and module download in builder-base remain cached.
 COPY pkg/ ./pkg/
+COPY mcp/ ./mcp/
 COPY test/e2e/ ./test/e2e/
 COPY Makefile ./
 

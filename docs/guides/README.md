@@ -8,6 +8,10 @@ The Guides section provides comprehensive, in-depth documentation for specific V
 
     Complete guide for backing up and restoring VM Service VMs on vSphere Supervisor. Covers VADP integration, automatic and manual registration workflows, restore types, application-level backup considerations, and troubleshooting.
 
+* [MCP Server](./mcp-server/README.md)
+
+    Use `vmop-mcp`, a Model Context Protocol server, to let AI assistants such as Claude Code, Claude Desktop, VS Code, and Cursor inspect, diagnose, and (when explicitly enabled) operate VM Service VMs with your own Supervisor credentials.
+
 ## Who Should Use These Guides
 
 - **Backup Vendors**: Integrating VADP-based backup solutions with VM Service

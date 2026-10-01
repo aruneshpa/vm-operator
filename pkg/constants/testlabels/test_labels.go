@@ -29,6 +29,9 @@ const (
 	// Group describes a test related to group logic.
 	Group = "group"
 
+	// MCP describes a test related to the vmop-mcp MCP server.
+	MCP = "mcp"
+
 	// Mutation describes a test related to a mutation webhook.
 	Mutation = "mutation"
 

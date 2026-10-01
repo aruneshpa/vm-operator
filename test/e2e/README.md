@@ -125,6 +125,17 @@ Tests are organized using Ginkgo labels for easy filtering:
 - `extended-functional` - Advanced feature tests
 - `experimental` - Excluded from all CI targets; requires infrastructure unavailable in the standard `vds_standard_medium` testbed (e.g. encryption-capable storage)
 
+### Feature Labels
+- `mcp` - Specs for `vmop-mcp`, the client-side MCP server in the `mcp/` module (`vmservice/vmservice/mcp/`). They create a DevOps SSO user, build the server in-process with that user's kubeconfig, and call its tools over in-memory transports, so requests go through real Supervisor RBAC and VM Operator admission. `MCP-READ` uses view access; `MCP-WRITE` uses edit access, creates a VM (dry run first), and powers it off. They are also labeled `experimental` until validated on a real Supervisor.
+
+Run only the MCP specs:
+
+```bash
+make test-e2e LABEL_FILTER="mcp"
+```
+
+`test/e2e/go.mod` requires `github.com/vmware-tanzu/vm-operator/mcp` via a `replace` to `../../mcp`, and `Dockerfile.e2e` copies `mcp/` into the image build context.
+
 ## Configuration
 
 ### Main Configuration File

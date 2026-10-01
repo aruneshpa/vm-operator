@@ -41,13 +41,17 @@ if [ -n "${LABEL_FILTER:-}" ]; then
   GO_TEST_FLAGS+=("--label-filter" "${LABEL_FILTER:-}")
 fi
 
-# Coverage is always enabled, it is just not always recorded to an output file.
-GO_TEST_FLAGS+=("--cover")
-GO_TEST_FLAGS+=("--covermode=atomic")
+# Coverage is enabled unless GO_TEST_COVER is "no", it is just not always
+# recorded to an output file. Nested Go modules, such as mcp/, must disable it
+# because ginkgo finalizes coverage profiles from the root module.
+if [ "${GO_TEST_COVER:-yes}" = "yes" ]; then
+  GO_TEST_FLAGS+=("--cover")
+  GO_TEST_FLAGS+=("--covermode=atomic")
 
-# Record coverage to an output file if COVERAGE_FILE is non-empty.
-if [ -n "${COVERAGE_FILE:-}" ]; then
-  GO_TEST_FLAGS+=("--coverprofile=${COVERAGE_FILE:-}")
+  # Record coverage to an output file if COVERAGE_FILE is non-empty.
+  if [ -n "${COVERAGE_FILE:-}" ]; then
+    GO_TEST_FLAGS+=("--coverprofile=${COVERAGE_FILE:-}")
+  fi
 fi
 
 # Customize the ginkgo test suite timeout. By default it's 1h.
@@ -55,8 +59,13 @@ GO_TEST_FLAGS+=("--timeout=3h")
 
 # Run the tests.
 # shellcheck disable=SC2086
-ginkgo "${GO_TEST_FLAGS[@]+"${GO_TEST_FLAGS[@]}"}" "${@:-}" \
-  -- -test.gocoverdir="$(pwd)" || TEST_CMD_EXIT_CODE="${?}"
+if [ "${GO_TEST_COVER:-yes}" = "yes" ]; then
+  ginkgo "${GO_TEST_FLAGS[@]+"${GO_TEST_FLAGS[@]}"}" "${@:-}" \
+    -- -test.gocoverdir="$(pwd)" || TEST_CMD_EXIT_CODE="${?}"
+else
+  ginkgo "${GO_TEST_FLAGS[@]+"${GO_TEST_FLAGS[@]}"}" "${@:-}" \
+    || TEST_CMD_EXIT_CODE="${?}"
+fi
 
 # TEST_CMD_EXIT_CODE may be set to 2 if there are any tests marked as
 # pending/skipped. This pattern is used by developers to leave test

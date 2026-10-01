@@ -76,6 +76,7 @@ export KUBEBUILDER_ASSETS := $(abspath $(TOOLS_BIN_DIR))
 # Binaries
 MANAGER                := $(BIN_DIR)/manager
 WEB_CONSOLE_VALIDATOR  := $(BIN_DIR)/web-console-validator
+VMOP_MCP               := $(BIN_DIR)/vmop-mcp
 VMCLASS                := $(BIN_DIR)/vmclass
 
 # Tooling binaries
@@ -126,7 +127,7 @@ COVERAGE_FILE ?= cover.out
 # However, given this is not a cheap operation, only gather these packages if
 # the test-nocover target is one of the currently active goals.
 ifeq (,$(filter-out test-nocover,$(MAKECMDGOALS)))
-COVERED_PKGS ?= $(shell find . -name '*_test.go' -not -path './api/*' -print | awk -F'/' '{print "./"$$2}' | sort -u)
+COVERED_PKGS ?= $(shell find . -name '*_test.go' -not -path './api/*' -not -path './mcp/*' -print | awk -F'/' '{print "./"$$2}' | sort -u)
 endif
 
 # CRI_BIN is the path to the container runtime binary.
@@ -237,6 +238,11 @@ test-nocover: | $(GINKGO)
 test-nocover: ## Run tests sans coverage
 	hack/test.sh $(COVERED_PKGS)
 
+.PHONY: test-mcp
+test-mcp: | $(GINKGO) $(ETCD) $(KUBE_APISERVER)
+test-mcp: ## Run vmop-mcp tests (the mcp/ module)
+	GO_TEST_COVER=no COVERAGE_FILE="" hack/test.sh ./mcp/...
+
 .PHONY: test
 test: | $(GINKGO) $(ETCD) $(KUBE_APISERVER)
 test: ## Run tests
@@ -272,6 +278,31 @@ $(WEB_CONSOLE_VALIDATOR):
 
 .PHONY: web-console-validator
 web-console-validator: prereqs generate lint-go web-console-validator-only ## Build web-console-validator binary
+
+VMOP_MCP_LDFLAGS = "\
+-X github.com/vmware-tanzu/vm-operator/mcp/pkg/buildinfo.Version=$(BUILD_VERSION) \
+-X github.com/vmware-tanzu/vm-operator/mcp/pkg/buildinfo.Commit=$(BUILD_COMMIT) \
+-w -s "
+
+.PHONY: $(VMOP_MCP) vmop-mcp-only
+vmop-mcp-only: $(VMOP_MCP) ## Build vmop-mcp MCP server binary only
+$(VMOP_MCP):
+	GOOS="$(GOOS)" GOARCH="$(GOARCH)" CGO_ENABLED=0 go -C mcp build -o $(abspath $@) -ldflags $(VMOP_MCP_LDFLAGS) ./cmd/vmop-mcp
+
+.PHONY: vmop-mcp
+vmop-mcp: prereqs lint-go vmop-mcp-only ## Build vmop-mcp MCP server binary
+
+VMOP_MCP_DIST_PLATFORMS ?= darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64
+
+.PHONY: vmop-mcp-dist
+vmop-mcp-dist: prereqs ## Cross-compile vmop-mcp release binaries and SHA256SUMS into bin/
+	@set -e; for p in $(VMOP_MCP_DIST_PLATFORMS); do \
+	  os=$${p%/*}; arch=$${p#*/}; ext=""; [ "$$os" = "windows" ] && ext=".exe"; \
+	  out="$(abspath $(BIN_DIR))/vmop-mcp-$$os-$$arch$$ext"; \
+	  echo "building $$out"; \
+	  GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go -C mcp build -o "$$out" -ldflags $(VMOP_MCP_LDFLAGS) ./cmd/vmop-mcp; \
+	done
+	cd $(BIN_DIR) && shasum -a 256 vmop-mcp-* | grep -v SHA256SUMS > vmop-mcp-SHA256SUMS
 
 vmclass: $(VMCLASS) ## Build vmclass binary
 $(VMCLASS): cmd/vmclass/main.go
@@ -927,8 +958,12 @@ docker-remove: image-remove
 ## Vulnerability Checks
 ## --------------------------------------
 
+.PHONY: vulncheck-mcp
+vulncheck-mcp: $(GOVULNCHECK)
+	$(GOVULNCHECK) -C mcp ./...
+
 .PHONY: vulncheck-go
-vulncheck-go: $(GOVULNCHECK)
+vulncheck-go: $(GOVULNCHECK) vulncheck-mcp
 	$(GOVULNCHECK) ./...
 
 

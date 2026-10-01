@@ -7,6 +7,7 @@ updates:
       - "/"
       - "/hack/tools"
       - "/test/e2e"
+      - "/mcp"
     schedule:
       interval: "daily"
     groups:

@@ -11,6 +11,7 @@ import (
 	"github.com/vmware-tanzu/vm-operator/test/e2e/vmservice/vmservice/computepolicies"
 	"github.com/vmware-tanzu/vm-operator/test/e2e/vmservice/vmservice/configpolicy"
 	"github.com/vmware-tanzu/vm-operator/test/e2e/vmservice/vmservice/devops"
+	"github.com/vmware-tanzu/vm-operator/test/e2e/vmservice/vmservice/mcp"
 	"github.com/vmware-tanzu/vm-operator/test/e2e/vmservice/vmservice/viadmin"
 	"github.com/vmware-tanzu/vm-operator/test/e2e/vmservice/vmservice/virtualmachine"
 	"github.com/vmware-tanzu/vm-operator/test/e2e/vmservice/vmservice/virtualmachinereplicaset"
@@ -61,6 +62,33 @@ var _ = Describe("Testing VM Services", Label("devops"), Label("viadmin"), Label
 				WCPNamespaceName: wcpNamespaceName,
 				LinuxVMName:      linuxVMName,
 			}
+		})
+	})
+
+	// The MCP specs carry the "experimental" label until they have been
+	// validated on a real Supervisor.
+	Context("MCP-SERVER", Label("mcp"), Label("experimental"), func() {
+		Context("MCP-READ", func() {
+			mcp.MCPReadSpec(context.TODO(), func() mcp.MCPSpecInput {
+				return mcp.MCPSpecInput{
+					ClusterProxy:     svClusterProxy,
+					Config:           config,
+					WCPClient:        wcpClient,
+					WCPNamespaceName: wcpNamespaceName,
+					LinuxVMName:      linuxVMName,
+				}
+			})
+		})
+		Context("MCP-WRITE", func() {
+			mcp.MCPWriteSpec(context.TODO(), func() mcp.MCPSpecInput {
+				return mcp.MCPSpecInput{
+					ClusterProxy:     svClusterProxy,
+					Config:           config,
+					WCPClient:        wcpClient,
+					WCPNamespaceName: wcpNamespaceName,
+					LinuxVMName:      linuxVMName,
+				}
+			})
 		})
 	})
 

@@ -127,6 +127,7 @@ controllers/           — reconcile loops (thin); one sub-package per controlle
 docs/                  — user-facing documentation
 external/              — vendored API definitions (each sub-directory is its own module — see below)
 hack/                  — build scripts (hack/tools/ is its own module — see below)
+mcp/                   — vmop-mcp client-side MCP server (its own module — see below)
 pkg/                   — business logic, providers, config, conditions
 services/              — long-running manager runnables (e.g. vm-watcher)
 test/                  — test builders, envtest helpers, E2E suites
@@ -141,20 +142,26 @@ webhooks/              — admission webhooks
 
 | Directory | Module |
 |-----------|--------|
+| `api-docs/` | `github.com/vmware-tanzu/vm-operator/api-docs` |
 | `api/` | `github.com/vmware-tanzu/vm-operator/api` |
 | `api/test/` | `github.com/vmware-tanzu/vm-operator/api/test` |
 | `external/appplatform/` | `github.com/vmware-tanzu/vm-operator/external/appplatform` |
 | `external/byok/` | `github.com/vmware-tanzu/vm-operator/external/byok` |
 | `external/capabilities/` | `github.com/vmware-tanzu/vm-operator/external/capabilities` |
+| `external/image-registry-operator/` | `github.com/vmware-tanzu/vm-operator/external/image-registry-operator` |
 | `external/infra/` | `github.com/vmware-tanzu/vm-operator/external/infra` |
+| `external/mobility-operator/` | `github.com/vmware-tanzu/vm-operator/external/mobility-operator` |
 | `external/ncp/` | `github.com/vmware-tanzu/vm-operator/external/ncp` |
 | `external/storage-policy-quota/` | `github.com/vmware-tanzu/vm-operator/external/storage-policy-quota` |
 | `external/tanzu-topology/` | `github.com/vmware-tanzu/vm-operator/external/tanzu-topology` |
+| `external/vim/api/` | `github.com/vmware-tanzu/vm-operator/external/vim/api` |
 | `external/vsphere-csi-driver/` | `github.com/vmware-tanzu/vm-operator/external/vsphere-csi-driver` |
 | `external/vsphere-policy/` | `github.com/vmware-tanzu/vm-operator/external/vsphere-policy` |
 | `hack/tools/` | `github.com/vmware-tanzu/vm-operator/hack/tools` |
+| `mcp/` | `github.com/vmware-tanzu/vm-operator/mcp` |
 | `pkg/backup/api/` | `github.com/vmware-tanzu/vm-operator/pkg/backup/api` |
 | `pkg/constants/testlabels/` | `github.com/vmware-tanzu/vm-operator/pkg/constants/testlabels` |
+| `test/e2e/` | `github.com/vmware-tanzu/vm-operator/test/e2e` |
 
 ## Ticket / wiki conventions
 

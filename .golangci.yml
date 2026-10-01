@@ -249,6 +249,32 @@ linters:
             desc: "do not import testing packages in non-test sources"
 
         #
+        # vmop-mcp (the mcp/ module) talks only to the Kubernetes API and must
+        # not depend on VM Operator's controller-manager packages or govmomi.
+        # depguard picks the longest matching prefix, so the explicit allow for
+        # testlabels wins over the broader deny of .../vm-operator/pkg.
+        #
+        mcp-boundary:
+          list-mode: lax # allow unless explicitly denied
+          files:
+          - "**/mcp/cmd/**"
+          - "**/mcp/pkg/**"
+          - "**/mcp/test/**"
+          allow:
+          - github.com/vmware-tanzu/vm-operator/pkg/constants/testlabels
+          deny:
+          - pkg: github.com/vmware/govmomi
+            desc: "vmop-mcp must not call vSphere; use the Kubernetes API only"
+          - pkg: github.com/vmware-tanzu/vm-operator/pkg
+            desc: "vmop-mcp must not import the root module (see .sdd/specs/010-mcp-server/plan.md)"
+          - pkg: github.com/vmware-tanzu/vm-operator/controllers
+            desc: "vmop-mcp must not import the root module (see .sdd/specs/010-mcp-server/plan.md)"
+          - pkg: github.com/vmware-tanzu/vm-operator/webhooks
+            desc: "vmop-mcp must not import the root module (see .sdd/specs/010-mcp-server/plan.md)"
+          - pkg: github.com/vmware-tanzu/vm-operator/services
+            desc: "vmop-mcp must not import the root module (see .sdd/specs/010-mcp-server/plan.md)"
+
+        #
         # This section is a duplicate of the main section, so please keep their
         # rules in lock-step. However, the one difference is files matched by
         # this section are allowed to import the "testing" package in order for

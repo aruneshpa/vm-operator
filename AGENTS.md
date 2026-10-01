@@ -44,3 +44,4 @@ The `.sdd/memory/` files define what is correct. Use this section only to calibr
 - The 11-step VM reconcile order itself — do not suggest reordering
 - Single-letter receiver names (`r`, `v`, `w`) — intentional per architectural standards
 - `external/` module contents — vendored external API types, not modified directly
+- Missing `pkgcfg.Features` gates in `mcp/**` — `vmop-mcp` runs outside the controller manager, so the feature-flag rule does not apply; its gates are installation and `--enable-write` (see `.sdd/specs/010-mcp-server/plan.md` Complexity tracking)

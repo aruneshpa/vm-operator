@@ -171,6 +171,7 @@ nav:
 - Guides:
   - guides/README.md
   - Backup and Restore: guides/backup-restore/README.md
+  - MCP Server: guides/mcp-server/README.md
 - Reference:
   - ref/README.md
   - API:

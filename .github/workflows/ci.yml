@@ -254,6 +254,34 @@ jobs:
     - name: Build ${{ matrix.target }}
       run: GOOS=linux GOARCH=amd64 make ${{ matrix.target }}
 
+  build-vmop-mcp:
+    needs:
+    - verify-go-modules
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - goos: linux
+          goarch: amd64
+        - goos: darwin
+          goarch: arm64
+        - goos: windows
+          goarch: amd64
+    name: vmop-mcp-${{ matrix.goos }}-${{ matrix.goarch }}
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+    - name: Install Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        go-version-file: 'mcp/go.mod'
+        cache: true
+        cache-dependency-path: 'mcp/go.sum'
+    - name: Build vmop-mcp
+      run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} make vmop-mcp-only
+
   test:
     needs:
     - verify-go-modules
@@ -265,6 +293,10 @@ jobs:
         - name: api
           covered-pkgs: ./api/...
           make-target: test-nocover
+          upload-coverage: false
+        - name: mcp
+          covered-pkgs: ./mcp/...
+          make-target: test-mcp
           upload-coverage: false
         - name: crd
           covered-pkgs: ./pkg/crd
