@@ -171,6 +171,7 @@ nav:
 - Guides:
   - guides/README.md
   - Backup and Restore: guides/backup-restore/README.md
+  - VM Mobility During Upgrades: guides/vm-mobility/README.md
 - Reference:
   - ref/README.md
   - API:
