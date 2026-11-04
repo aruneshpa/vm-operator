@@ -16,10 +16,11 @@ The argument can be a comma-separated patterns and glob wildcards (* and ?)
 of the CRD names. Updated deployment yaml that contains the CRDs  is
 generated via make kustomize-wcp.
 
-The -C argument also re-applies the vmware-system-vmop-manager-role
-ClusterRole from the same local-deployment.yaml, so that RBAC additions
-(e.g. access to the vm-api.io VirtualMachine resource) reach the Supervisor
-without a full vmop.yaml redeploy.
+The -C argument also re-applies the vmware-system-vmop-manager-role and
+vmware-system-vmop-vm-api-virtualmachine-editor-role ClusterRoles from the same
+local-deployment.yaml, so that RBAC additions (e.g. access to the vm-api.io
+VirtualMachine resource) reach the Supervisor without a full vmop.yaml
+redeploy.
 
 If you have testbedInfo.json file - either a local file or the URL - that
 can be specified with the -T argument. This script will then use that file
@@ -46,7 +47,7 @@ FLAGS:
   -c Supervisor cluster, eg 'domain-c8'
   -C Deploy CRDs matching glob pattern (e.g. '*.vmoperator.vmware.com')
      Supports comma-separated patterns and glob wildcards (* and ?).
-     Also re-applies the vmware-system-vmop-manager-role ClusterRole.
+     Also re-applies the VM Operator manager and VM API editor ClusterRoles.
   -k Path, on the Supervisor CP node, to the admin kubeconfig used to apply
      CRDs (default: /etc/kubernetes/admin.conf). This is the same kubeconfig
      'kubectl-sudo' switches to after its interactive confirmation prompt;
@@ -123,6 +124,30 @@ function extract_vmop_crds() {
 
     yq 'select(.kind == "CustomResourceDefinition" and (.metadata.name | test("^('"$regex"')$")))' \
         "$LOCAL_DEPLOYMENT_YAML"
+}
+
+# ClusterRoles re-applied alongside CRDs: the VM Operator manager role (so the
+# controllers and webhooks can reach new resources) and the VM API editor role
+# (so namespace users can create vm-api.io VirtualMachines).
+VMOP_ROLE_NAMES=(vmware-system-vmop-manager-role vmware-system-vmop-vm-api-virtualmachine-editor-role)
+
+function extract_vmop_roles() {
+    yq 'select(.kind == "ClusterRole" and (.metadata.name | test("^('"$(IFS='|'; echo "${VMOP_ROLE_NAMES[*]}")"')$")))' \
+        "$LOCAL_DEPLOYMENT_YAML"
+}
+
+function sv_deploy_roles() {
+    local ip roles_yaml
+
+    ip=${SV_VIP:-${SV_IPS[0]}}
+    roles_yaml=$(extract_vmop_roles)
+
+    if [[ -z $roles_yaml ]] ; then
+        fatal "No ClusterRoles (${VMOP_ROLE_NAMES[*]}) found in $LOCAL_DEPLOYMENT_YAML"
+    fi
+
+    log "Deploying ClusterRoles to $ip..."
+    echo "$roles_yaml" | sv_cp_ssh_cmd "$ip" "KUBECONFIG='$SV_ADMIN_KUBECONFIG' kubectl apply --server-side=true --force-conflicts -f -"
 }
 
 function sv_deploy_crds() {
@@ -364,6 +389,7 @@ if [[ -n $DEPLOY_CRD_PATTERN ]] ; then
        fatal "yq command required"
     fi
     sv_deploy_crds "$DEPLOY_CRD_PATTERN"
+    sv_deploy_roles
 fi
 
 if [[ -n $IMAGE ]] ; then

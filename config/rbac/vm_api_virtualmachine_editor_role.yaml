@@ -1,0 +1,30 @@
+# Lets namespace users create and manage the generic vm-api.io VirtualMachine.
+# The aggregate labels fold these rules into the built-in edit and admin
+# ClusterRoles, so anyone who can already edit workloads in a namespace can
+# also create a VM API VirtualMachine there.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vm-api-virtualmachine-editor-role
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+- apiGroups:
+  - vm-api.io
+  resources:
+  - virtualmachines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - vm-api.io
+  resources:
+  - virtualmachines/status
+  verbs:
+  - get
