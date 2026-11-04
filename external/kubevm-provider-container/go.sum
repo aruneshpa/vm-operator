@@ -102,6 +102,10 @@ github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
+github.com/vm-api/vm-api v0.0.0-20261031060700-d42bf7e4cd97 h1:cGhNQFAcn+aRf4EkfiLJZEt2MZVTItaL1jCLQNw7DTg=
+github.com/vm-api/vm-api v0.0.0-20261031060700-d42bf7e4cd97/go.mod h1:j6ZU03QPcf4nUh9NtJT022w7cB6d/fGTe6EN9DtMaJw=
+github.com/vm-api/vm-api/controller v0.0.0-20261031060700-d42bf7e4cd97 h1:AYUVjsxkk097DviCIMG2o7sIoi/HB2Rm1P4j5Z058FA=
+github.com/vm-api/vm-api/controller v0.0.0-20261031060700-d42bf7e4cd97/go.mod h1:TUzUbNPwSWDVDfvdSY0aS8+VWPiQAGGN/W4uVafNuvQ=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=

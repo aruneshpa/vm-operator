@@ -319,11 +319,6 @@ GO_MOD_DIRS_TO_LINT := $(filter-out ./hack/tools%,$(GO_MOD_DIRS_TO_LINT))
 GO_MOD_DIRS_TO_LINT := $(filter-out ./api-docs%,$(GO_MOD_DIRS_TO_LINT))
 GO_MOD_DIRS_TO_LINT := $(filter-out ./packer-plugin-vsphere-src%,$(GO_MOD_DIRS_TO_LINT))
 
-# The rest of external/ holds copies of other projects' API types, which are
-# not ours to lint. external/kubevm is first-party code that happens to live
-# there, so it is added back explicitly.
-GO_MOD_DIRS_TO_LINT += ./external/kubevm/
-GO_MOD_DIRS_TO_LINT += ./external/kubevm/controller/
 GO_LINT_DIR_TARGETS := $(addprefix lint-,$(GO_MOD_DIRS_TO_LINT))
 
 .PHONY: $(GO_LINT_DIR_TARGETS)
@@ -442,9 +437,7 @@ generate-manifests: ## Generate manifests e.g. CRD, RBAC etc.
 		crd:crdVersions=v1 \
 		output:crd:dir=$(CRD_ROOT) \
 		output:none
-	$(MAKE) -C ./external/kubevm generate-manifests
-	@cp -f ./external/kubevm/config/crd/bases/kube-vm.io_virtualmachines.yaml \
-		$(EXTERNAL_CRD_ROOT)/kube-vm.io_virtualmachines.yaml
+	$(MAKE) generate-vm-api-manifests
 	$(CONTROLLER_GEN) \
 		paths=./webhooks/... \
 		output:webhook:dir=$(WEBHOOK_ROOT) \
@@ -453,9 +446,26 @@ generate-manifests: ## Generate manifests e.g. CRD, RBAC etc.
 		paths=./controllers/... \
 		paths=./pkg/... \
 		paths=./webhooks/... \
-		paths=github.com/vmware-tanzu/vm-operator/external/kubevm/controller/... \
+		paths=$(VM_API_CONTROLLER_SLUG)/... \
 		output:rbac:dir=$(RBAC_ROOT) \
 		rbac:roleName=manager-role
+
+# The VM API (https://github.com/vm-api/vm-api) lives in its own repository and
+# is consumed as the Go modules github.com/vm-api/vm-api (the VirtualMachine
+# API) and github.com/vm-api/vm-api/controller (the core controller, linked into
+# the VM Operator manager). Both are pinned in go.mod. The VM API CRD is
+# generated from the pinned API module, so it always matches the compiled types.
+VM_API_SLUG := github.com/vm-api/vm-api
+VM_API_CONTROLLER_SLUG := github.com/vm-api/vm-api/controller
+
+.PHONY: generate-vm-api-manifests
+generate-vm-api-manifests: $(CONTROLLER_GEN)
+generate-vm-api-manifests: ## Generate the VM API VirtualMachine CRD from the pinned vm-api module
+	$(CONTROLLER_GEN) \
+		paths=$(VM_API_SLUG)/api/... \
+		crd:crdVersions=v1 \
+		output:crd:dir=$(EXTERNAL_CRD_ROOT) \
+		output:none
 
 .PHONY: generate-external-manifests
 generate-external-manifests: $(CONTROLLER_GEN)
@@ -517,11 +527,7 @@ generate-external-manifests: ## Generate manifests for the external types for te
 		crd:crdVersions=v1 \
 		output:crd:dir=$(EXTERNAL_CRD_ROOT) \
 		output:none
-	$(CONTROLLER_GEN) \
-		paths=github.com/vmware-tanzu/vm-operator/external/kubevm/... \
-		crd:crdVersions=v1 \
-		output:crd:dir=$(EXTERNAL_CRD_ROOT) \
-		output:none
+	$(MAKE) generate-vm-api-manifests
 
 .PHONY: generate-go-conversions
 generate-go-conversions: ## Generate conversions go code

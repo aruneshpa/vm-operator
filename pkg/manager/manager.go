@@ -33,7 +33,7 @@ import (
 	byokv1 "github.com/vmware-tanzu/vm-operator/external/byok/api/v1alpha1"
 	capv1 "github.com/vmware-tanzu/vm-operator/external/capabilities/api/v1alpha1"
 	infrav1 "github.com/vmware-tanzu/vm-operator/external/infra/api/v1alpha1"
-	kubevmv1a1 "github.com/vmware-tanzu/vm-operator/external/kubevm/api/v1alpha1"
+	kubevmv1a1 "github.com/vm-api/vm-api/api/v1alpha1"
 	ncpv1alpha1 "github.com/vmware-tanzu/vm-operator/external/ncp/api/v1alpha1"
 	spqv1 "github.com/vmware-tanzu/vm-operator/external/storage-policy-quota/api/v1alpha2"
 	topologyv1 "github.com/vmware-tanzu/vm-operator/external/tanzu-topology/api/v1alpha1"
@@ -121,7 +121,7 @@ func New(ctx context.Context, opts Options) (Manager, error) {
 		_ = kubevmv1a1.AddToScheme(opts.Scheme)
 
 		// The mutating webhook Gets the generic VirtualMachine named by the
-		// kube-vm.io/virtual-machine annotation. A cached read would lazily
+		// vm-api.io/virtual-machine annotation. A cached read would lazily
 		// start an informer during a live admission request under
 		// failurePolicy: Fail, and that informer never syncs if the CRD is
 		// absent, so this type is excluded from the cache.

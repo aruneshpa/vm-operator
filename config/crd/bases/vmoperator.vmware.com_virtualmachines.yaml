@@ -16938,13 +16938,13 @@ spec:
                 description: |-
                   Addresses are the VM's observed network addresses, reported at the
                   fixed contract path a generic infrastructure consumer, such as a
-                  kube-vm.io VirtualMachine, reads on every provider. This duplicates
+                  vm-api.io VirtualMachine, reads on every provider. This duplicates
                   information already reported under Network.PrimaryIP4.
                 items:
                   description: |-
                     VirtualMachineAddress is a network address reported for a VirtualMachine at
                     the fixed contract path a generic infrastructure consumer, such as a
-                    kube-vm.io VirtualMachine, reads on every provider.
+                    vm-api.io VirtualMachine, reads on every provider.
                   properties:
                     address:
                       description: Address is the address value.
@@ -18109,7 +18109,7 @@ spec:
                 description: |-
                   ProviderID is the platform-unique identifier for this VM, reported at
                   the fixed contract path a generic infrastructure consumer, such as a
-                  kube-vm.io VirtualMachine, reads on every provider. This duplicates
+                  vm-api.io VirtualMachine, reads on every provider. This duplicates
                   information already reported under InstanceUUID.
                 type: string
               providerMetadata:
@@ -18118,13 +18118,13 @@ spec:
                 description: |-
                   ProviderMetadata is a free-form set of further provider-reported facts,
                   reported at the fixed contract path a generic infrastructure consumer,
-                  such as a kube-vm.io VirtualMachine, reads on every provider.
+                  such as a vm-api.io VirtualMachine, reads on every provider.
                 type: object
               ready:
                 description: |-
                   Ready is whether the VM has converged to its desired power state and,
                   if powered on, has reported an address, reported at the fixed contract
-                  path a generic infrastructure consumer, such as a kube-vm.io
+                  path a generic infrastructure consumer, such as a vm-api.io
                   VirtualMachine, reads on every provider. Duplicates the
                   VirtualMachineConditionInfrastructureReady condition above.
                 type: boolean

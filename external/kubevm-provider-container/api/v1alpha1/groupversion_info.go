@@ -4,13 +4,13 @@
 
 // Package v1alpha1 contains the container provider's API types for KubeVM.
 //
-// This provider joins the shared infrastructure.kube-vm.io group used by
+// This provider joins the shared infrastructure.vm-api.io group used by
 // every KubeVM provider (see external/kubevm-provider-aws), rather than
-// minting infrastructure.container.kube-vm.io: the group names the contract
+// minting infrastructure.container.vm-api.io: the group names the contract
 // role, and the Kind (ContainerMachine) names the provider.
 //
 // +kubebuilder:object:generate=true
-// +groupName=infrastructure.kube-vm.io
+// +groupName=infrastructure.vm-api.io
 package v1alpha1
 
 import (
@@ -19,7 +19,7 @@ import (
 )
 
 // GroupName is this provider's API group.
-const GroupName = "infrastructure.kube-vm.io"
+const GroupName = "infrastructure.vm-api.io"
 
 var (
 	// GroupVersion is the group and version for these types.

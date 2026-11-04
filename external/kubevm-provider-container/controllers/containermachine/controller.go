@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	kubevmv1a1 "github.com/vmware-tanzu/vm-operator/external/kubevm/api/v1alpha1"
+	kubevmv1a1 "github.com/vm-api/vm-api/api/v1alpha1"
 
 	containerv1a1 "github.com/vmware-tanzu/vm-operator/external/kubevm-provider-container/api/v1alpha1"
 	"github.com/vmware-tanzu/vm-operator/external/kubevm-provider-container/internal/container"
@@ -78,9 +78,9 @@ func containerName(machine *containerv1a1.ContainerMachine) string {
 	return fmt.Sprintf("kubevm-%s-%s", machine.Namespace, machine.Name)
 }
 
-// +kubebuilder:rbac:groups=infrastructure.kube-vm.io,resources=containermachines,verbs=get;list;watch;patch;delete
-// +kubebuilder:rbac:groups=infrastructure.kube-vm.io,resources=containermachines/status,verbs=get;patch
-// +kubebuilder:rbac:groups=kube-vm.io,resources=virtualmachines,verbs=get;list;watch
+// +kubebuilder:rbac:groups=infrastructure.vm-api.io,resources=containermachines,verbs=get;list;watch;patch;delete
+// +kubebuilder:rbac:groups=infrastructure.vm-api.io,resources=containermachines/status,verbs=get;patch
+// +kubebuilder:rbac:groups=vm-api.io,resources=virtualmachines,verbs=get;list;watch
 
 // Reconcile drives one ContainerMachine towards the state its parent asks
 // for.

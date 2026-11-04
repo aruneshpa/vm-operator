@@ -4,12 +4,12 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.21.0
-  name: virtualmachines.kube-vm.io
+  name: virtualmachines.vm-api.io
 spec:
-  group: kube-vm.io
+  group: vm-api.io
   names:
     categories:
-    - kubevm
+    - vm-api
     kind: VirtualMachine
     listKind: VirtualMachineList
     plural: virtualmachines
@@ -121,7 +121,7 @@ spec:
                           apiGroup:
                             description: |-
                               APIGroup of the referent, as a fully qualified domain name — for example
-                              "kube-vm.io" or "infrastructure.vsphere.kube-vm.io".
+                              "vm-api.io" or "infrastructure.vsphere.vm-api.io".
                             maxLength: 253
                             minLength: 1
                             pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -151,7 +151,7 @@ spec:
                           apiGroup:
                             description: |-
                               APIGroup of the referent, as a fully qualified domain name — for example
-                              "kube-vm.io" or "infrastructure.vsphere.kube-vm.io".
+                              "vm-api.io" or "infrastructure.vsphere.vm-api.io".
                             maxLength: 253
                             minLength: 1
                             pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -330,7 +330,7 @@ spec:
                             apiGroup:
                               description: |-
                                 APIGroup of the referent, as a fully qualified domain name — for example
-                                "kube-vm.io" or "infrastructure.vsphere.kube-vm.io".
+                                "vm-api.io" or "infrastructure.vsphere.vm-api.io".
                               maxLength: 253
                               minLength: 1
                               pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -360,7 +360,7 @@ spec:
                             apiGroup:
                               description: |-
                                 APIGroup of the referent, as a fully qualified domain name — for example
-                                "kube-vm.io" or "infrastructure.vsphere.kube-vm.io".
+                                "vm-api.io" or "infrastructure.vsphere.vm-api.io".
                               maxLength: 253
                               minLength: 1
                               pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -477,7 +477,7 @@ spec:
                   apiGroup:
                     description: |-
                       APIGroup of the referent, as a fully qualified domain name — for example
-                      "kube-vm.io" or "infrastructure.vsphere.kube-vm.io".
+                      "vm-api.io" or "infrastructure.vsphere.vm-api.io".
                     maxLength: 253
                     minLength: 1
                     pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -620,7 +620,7 @@ spec:
                             apiGroup:
                               description: |-
                                 APIGroup of the referent, as a fully qualified domain name — for example
-                                "kube-vm.io" or "infrastructure.vsphere.kube-vm.io".
+                                "vm-api.io" or "infrastructure.vsphere.vm-api.io".
                               maxLength: 253
                               minLength: 1
                               pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$

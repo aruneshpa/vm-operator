@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	kubevmv1a1 "github.com/vmware-tanzu/vm-operator/external/kubevm/api/v1alpha1"
+	kubevmv1a1 "github.com/vm-api/vm-api/api/v1alpha1"
 
 	vmopv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha6"
 	pkgcfg "github.com/vmware-tanzu/vm-operator/pkg/config"
@@ -20,7 +20,7 @@ import (
 )
 
 // ResolveKubeVMParentOnCreate resolves this VM's configuration from an
-// owning kube-vm.io VirtualMachine named by the kube-vm.io/virtual-machine
+// owning vm-api.io VirtualMachine named by the vm-api.io/virtual-machine
 // annotation.
 //
 // It returns immediately, doing nothing, unless the KubeVMProvider feature

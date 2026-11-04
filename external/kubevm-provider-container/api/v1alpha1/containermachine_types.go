@@ -13,14 +13,14 @@ import (
 // Without it the container leaks: the core deletes the provider object and
 // waits, so nothing else stands between a deleted VirtualMachine and a
 // container the local runtime still knows about.
-const Finalizer = "infrastructure.kube-vm.io/containermachine"
+const Finalizer = "infrastructure.vm-api.io/containermachine"
 
 // AnnotationKey is the annotation a ContainerMachine carries to name the
 // VirtualMachine it belongs to. Adoption only happens when that VirtualMachine
 // ALSO names this object in spec.infrastructureRef — a one-sided reference
 // links nothing. See docs/implementing-a-provider.md in the kubevm module for
 // the full explanation of why both sides are required.
-const AnnotationKey = "kube-vm.io/virtual-machine"
+const AnnotationKey = "vm-api.io/virtual-machine"
 
 // ContainerRuntime selects the local container engine this provider drives.
 //
@@ -205,7 +205,7 @@ const (
 	ReasonContainerGone = "ContainerGone"
 )
 
-// +kubebuilder:metadata:labels="kube-vm.io/v1alpha1=v1alpha1"
+// +kubebuilder:metadata:labels="vm-api.io/v1alpha1=v1alpha1"
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=cm,categories=kubevm

@@ -18,7 +18,7 @@ generated via make kustomize-wcp.
 
 The -C argument also re-applies the vmware-system-vmop-manager-role
 ClusterRole from the same local-deployment.yaml, so that RBAC additions
-(e.g. access to the kube-vm.io VirtualMachine resource) reach the Supervisor
+(e.g. access to the vm-api.io VirtualMachine resource) reach the Supervisor
 without a full vmop.yaml redeploy.
 
 If you have testbedInfo.json file - either a local file or the URL - that

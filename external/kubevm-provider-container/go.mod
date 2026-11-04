@@ -1,7 +1,7 @@
 module github.com/vmware-tanzu/vm-operator/external/kubevm-provider-container
 
 //
-// This is the reference "bootstrap" provider for kube-vm.io: it backs a
+// This is the reference "bootstrap" provider for vm-api.io: it backs a
 // VirtualMachine with a local Docker/Podman container instead of a real VM,
 // so external/kubevm/docs/implementing-a-provider.md has a working example to
 // walk through and so contributors can exercise the core controller without
@@ -11,14 +11,9 @@ module github.com/vmware-tanzu/vm-operator/external/kubevm-provider-container
 //
 go 1.23.0
 
-replace (
-	github.com/vmware-tanzu/vm-operator/external/kubevm => ../kubevm
-	github.com/vmware-tanzu/vm-operator/external/kubevm/controller => ../kubevm/controller
-)
-
 require (
-	github.com/vmware-tanzu/vm-operator/external/kubevm v0.0.0-00010101000000-000000000000
-	github.com/vmware-tanzu/vm-operator/external/kubevm/controller v0.0.0-00010101000000-000000000000
+	github.com/vm-api/vm-api v0.0.0-20261031060700-d42bf7e4cd97
+	github.com/vm-api/vm-api/controller v0.0.0-20261031060700-d42bf7e4cd97
 	k8s.io/apimachinery v0.31.0
 	k8s.io/client-go v0.31.0
 	sigs.k8s.io/controller-runtime v0.19.0

@@ -110,7 +110,7 @@ func ReconcileStatus(
 
 // reconcileStatusReady sets the fixed contract Ready condition and
 // status.ready boolean, read by every generic infrastructure consumer (e.g.
-// a kube-vm.io VirtualMachine) at these paths. The VM is ready once it has
+// a vm-api.io VirtualMachine) at these paths. The VM is ready once it has
 // converged to its desired power state and, if powered on, has reported an
 // address. Must run after reconcileStatusPowerState and reconcileStatusGuest,
 // which set the PowerStateSynced condition and status.Addresses this reads.
@@ -472,7 +472,7 @@ func reconcileStatusPlatform(
 	vmCtx.VM.Status.InstanceUUID = vmCtx.MoVM.Summary.Config.InstanceUuid
 
 	// Contract status fields, read by every generic infrastructure consumer
-	// (e.g. a kube-vm.io VirtualMachine) at these fixed paths.
+	// (e.g. a vm-api.io VirtualMachine) at these fixed paths.
 	vmCtx.VM.Status.ProviderID = vmCtx.MoVM.Summary.Config.InstanceUuid
 	if vmCtx.VM.Status.ProviderMetadata == nil {
 		vmCtx.VM.Status.ProviderMetadata = map[string]string{}
@@ -1384,7 +1384,7 @@ func updateGuestNetworkStatus(
 		vm.Status.Network.Interfaces = ifaceStatuses
 
 		// Contract status field, read by every generic infrastructure
-		// consumer (e.g. a kube-vm.io VirtualMachine) at this fixed path.
+		// consumer (e.g. a vm-api.io VirtualMachine) at this fixed path.
 		// Duplicates the primary IPv4 address reported above.
 		if primaryIP4 != "" {
 			vm.Status.Addresses = []vmopv1.VirtualMachineAddress{

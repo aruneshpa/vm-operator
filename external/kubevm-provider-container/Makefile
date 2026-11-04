@@ -194,7 +194,7 @@ verify-codegen: ## Verify generated code
 image-build: ## Build the manager image
 	$(CRI_BIN) build -t $(IMG) -f $(ROOT_DIR)/Dockerfile $(REPO_ROOT)
 
-# Both CRDs: this provider's ContainerMachine, and the kube-vm.io
+# Both CRDs: this provider's ContainerMachine, and the vm-api.io
 # VirtualMachine that the KubeVM core hosted in this manager reconciles.
 .PHONY: install
 install: ## Install the CRDs into the cluster named by KUBECONFIG

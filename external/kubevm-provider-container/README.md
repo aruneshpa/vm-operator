@@ -18,10 +18,10 @@ read before tackling a real platform's SDK.
 
 Two objects, both created by hand, linked in both directions:
 
-- A `VirtualMachine` (`kube-vm.io/v1alpha1`), naming this provider's object
+- A `VirtualMachine` (`vm-api.io/v1alpha1`), naming this provider's object
   in `spec.infrastructureRef`.
-- A `ContainerMachine` (`infrastructure.kube-vm.io/v1alpha1`), created with
-  an empty spec and a `kube-vm.io/virtual-machine: <name>` annotation naming
+- A `ContainerMachine` (`infrastructure.vm-api.io/v1alpha1`), created with
+  an empty spec and a `vm-api.io/virtual-machine: <name>` annotation naming
   the `VirtualMachine` back.
 
 See [`config/samples/virtualmachine.yaml`](config/samples/virtualmachine.yaml)

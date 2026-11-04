@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package kubevmlink reconciles a VM Operator VirtualMachine that is owned
-// by a kube-vm.io VirtualMachine, keeping the delegated spec.powerState
+// by a vm-api.io VirtualMachine, keeping the delegated spec.powerState
 // field in step with the generic object and reporting when a post-create
 // edit to an immutable delegated field cannot be applied.
 package kubevmlink
@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	kubevmv1a1 "github.com/vmware-tanzu/vm-operator/external/kubevm/api/v1alpha1"
+	kubevmv1a1 "github.com/vm-api/vm-api/api/v1alpha1"
 
 	vmopv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha6"
 	"github.com/vmware-tanzu/vm-operator/pkg/conditions"
@@ -64,7 +64,7 @@ func AddToManager(ctx *pkgctx.ControllerManagerContext, mgr manager.Manager) err
 		Complete(r)
 }
 
-// genericToProviderMapperFn maps a kube-vm.io VirtualMachine event to the
+// genericToProviderMapperFn maps a vm-api.io VirtualMachine event to the
 // provider object its spec.infrastructureRef names, when that reference
 // points at a vmoperator.vmware.com VirtualMachine.
 func genericToProviderMapperFn() handler.MapFunc {
@@ -89,7 +89,7 @@ func genericToProviderMapperFn() handler.MapFunc {
 }
 
 // NewReconciler returns a new reconciler for VirtualMachine objects owned by
-// a kube-vm.io VirtualMachine.
+// a vm-api.io VirtualMachine.
 func NewReconciler(
 	ctx context.Context,
 	client client.Client,
@@ -105,7 +105,7 @@ func NewReconciler(
 }
 
 // Reconciler reassert the delegated spec.powerState field from an owning
-// kube-vm.io VirtualMachine, and reports when a post-create edit to an
+// vm-api.io VirtualMachine, and reports when a post-create edit to an
 // immutable delegated field cannot be applied.
 type Reconciler struct {
 	client.Client
@@ -116,10 +116,10 @@ type Reconciler struct {
 
 // +kubebuilder:rbac:groups=vmoperator.vmware.com,resources=virtualmachines,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=vmoperator.vmware.com,resources=virtualmachines/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=kube-vm.io,resources=virtualmachines,verbs=list;watch
+// +kubebuilder:rbac:groups=vm-api.io,resources=virtualmachines,verbs=list;watch
 
 // Reconcile reasserts the delegated spec.powerState field from the owning
-// kube-vm.io VirtualMachine onto the provider object, and sets the UpToDate
+// vm-api.io VirtualMachine onto the provider object, and sets the UpToDate
 // condition false when a delegated field that is immutable after create no
 // longer matches what the generic object requests.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {

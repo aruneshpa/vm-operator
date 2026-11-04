@@ -5,21 +5,21 @@
 // Package kubevm holds the linkage and down-mapping helpers shared between
 // VM Operator's mutating webhook and its controllers/virtualmachine/kubevmlink
 // reconciler, both of which resolve a VM Operator VirtualMachine's
-// configuration from an owning kube-vm.io VirtualMachine.
+// configuration from an owning vm-api.io VirtualMachine.
 package kubevm
 
 import (
 	"fmt"
 
-	kubevmv1a1 "github.com/vmware-tanzu/vm-operator/external/kubevm/api/v1alpha1"
+	kubevmv1a1 "github.com/vm-api/vm-api/api/v1alpha1"
 
 	vmopv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha6"
 )
 
 // AnnotationKey is the annotation a VM Operator VirtualMachine carries to
-// name the kube-vm.io VirtualMachine that adopted it as its infrastructure
+// name the vm-api.io VirtualMachine that adopted it as its infrastructure
 // object. Its value is the generic object's name, in the same namespace.
-const AnnotationKey = "kube-vm.io/virtual-machine"
+const AnnotationKey = "vm-api.io/virtual-machine"
 
 // GenericObjectName returns the name of the generic VirtualMachine the given
 // provider object's annotation names, and whether the annotation is set.

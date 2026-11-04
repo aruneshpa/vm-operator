@@ -17,7 +17,7 @@ import (
 
 func kubevmAnnotationTests() {
 	Describe(
-		"kube-vm.io/virtual-machine annotation immutability",
+		"vm-api.io/virtual-machine annotation immutability",
 		Label(testlabels.Update, testlabels.API, testlabels.Validation, testlabels.Webhook),
 		unitTestsKubeVMAnnotationImmutability,
 	)

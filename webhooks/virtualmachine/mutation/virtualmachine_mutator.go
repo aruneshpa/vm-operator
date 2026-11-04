@@ -59,7 +59,7 @@ const (
 // +kubebuilder:rbac:groups=vmoperator.vmware.com,resources=clustervirtualmachineimages,verbs=get;list;watch
 // +kubebuilder:rbac:groups=vmoperator.vmware.com,resources=clustervirtualmachineimages/status,verbs=get;list;watch
 // +kubebuilder:rbac:groups=netoperator.vmware.com,resources=networksettings,verbs=get;list;watch
-// +kubebuilder:rbac:groups=kube-vm.io,resources=virtualmachines,verbs=get
+// +kubebuilder:rbac:groups=vm-api.io,resources=virtualmachines,verbs=get
 
 // AddToManager adds the webhook to the provided manager.
 func AddToManager(ctx *pkgctx.ControllerManagerContext, mgr ctrlmgr.Manager) error {

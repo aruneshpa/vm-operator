@@ -62,7 +62,7 @@ const (
 
 	// VirtualMachineConditionUpToDate indicates whether the VM's spec fully
 	// reflects the values requested by an owning generic infrastructure
-	// consumer, such as a kube-vm.io VirtualMachine. It is False with reason
+	// consumer, such as a vm-api.io VirtualMachine. It is False with reason
 	// UnsupportedByProvider when a requested change cannot be applied because
 	// the corresponding VM Operator field is immutable after create.
 	VirtualMachineConditionUpToDate = "UpToDate"
@@ -70,7 +70,7 @@ const (
 	// VirtualMachineConditionInfrastructureReady indicates whether the VM has
 	// converged to its desired power state and, if powered on, has reported
 	// an address. This is a contract condition, read by every generic
-	// infrastructure consumer (e.g. a kube-vm.io VirtualMachine) at this
+	// infrastructure consumer (e.g. a vm-api.io VirtualMachine) at this
 	// fixed type, alongside VM Operator's own, more granular readiness
 	// conditions. Named distinctly from ReadyConditionType, which this
 	// package already reserves exclusively for the configured readiness
@@ -1422,7 +1422,7 @@ type VirtualMachineGuestStatus struct {
 
 // VirtualMachineAddress is a network address reported for a VirtualMachine at
 // the fixed contract path a generic infrastructure consumer, such as a
-// kube-vm.io VirtualMachine, reads on every provider.
+// vm-api.io VirtualMachine, reads on every provider.
 type VirtualMachineAddress struct {
 	// +optional
 
@@ -1600,7 +1600,7 @@ type VirtualMachineStatus struct {
 
 	// Addresses are the VM's observed network addresses, reported at the
 	// fixed contract path a generic infrastructure consumer, such as a
-	// kube-vm.io VirtualMachine, reads on every provider. This duplicates
+	// vm-api.io VirtualMachine, reads on every provider. This duplicates
 	// information already reported under Network.PrimaryIP4.
 	Addresses []VirtualMachineAddress `json:"addresses,omitempty"`
 
@@ -1608,7 +1608,7 @@ type VirtualMachineStatus struct {
 
 	// ProviderID is the platform-unique identifier for this VM, reported at
 	// the fixed contract path a generic infrastructure consumer, such as a
-	// kube-vm.io VirtualMachine, reads on every provider. This duplicates
+	// vm-api.io VirtualMachine, reads on every provider. This duplicates
 	// information already reported under InstanceUUID.
 	ProviderID string `json:"providerID,omitempty"`
 
@@ -1616,14 +1616,14 @@ type VirtualMachineStatus struct {
 
 	// ProviderMetadata is a free-form set of further provider-reported facts,
 	// reported at the fixed contract path a generic infrastructure consumer,
-	// such as a kube-vm.io VirtualMachine, reads on every provider.
+	// such as a vm-api.io VirtualMachine, reads on every provider.
 	ProviderMetadata map[string]string `json:"providerMetadata,omitempty"`
 
 	// +optional
 
 	// Ready is whether the VM has converged to its desired power state and,
 	// if powered on, has reported an address, reported at the fixed contract
-	// path a generic infrastructure consumer, such as a kube-vm.io
+	// path a generic infrastructure consumer, such as a vm-api.io
 	// VirtualMachine, reads on every provider. Duplicates the
 	// VirtualMachineConditionInfrastructureReady condition above.
 	Ready bool `json:"ready,omitempty"`

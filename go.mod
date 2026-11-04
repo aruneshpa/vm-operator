@@ -8,8 +8,6 @@ replace (
 	github.com/vmware-tanzu/vm-operator/external/byok => ./external/byok
 	github.com/vmware-tanzu/vm-operator/external/capabilities => ./external/capabilities
 	github.com/vmware-tanzu/vm-operator/external/infra => ./external/infra
-	github.com/vmware-tanzu/vm-operator/external/kubevm => ./external/kubevm
-	github.com/vmware-tanzu/vm-operator/external/kubevm/controller => ./external/kubevm/controller
 	github.com/vmware-tanzu/vm-operator/external/ncp => ./external/ncp
 	github.com/vmware-tanzu/vm-operator/external/storage-policy-quota => ./external/storage-policy-quota
 	github.com/vmware-tanzu/vm-operator/external/tanzu-topology => ./external/tanzu-topology
@@ -73,8 +71,8 @@ require (
 require k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
 
 require (
-	github.com/vmware-tanzu/vm-operator/external/kubevm v0.0.0-00010101000000-000000000000
-	github.com/vmware-tanzu/vm-operator/external/kubevm/controller v0.0.0-00010101000000-000000000000
+	github.com/vm-api/vm-api v0.0.0-20261031060700-d42bf7e4cd97
+	github.com/vm-api/vm-api/controller v0.0.0-20261031060700-d42bf7e4cd97
 )
 
 require (

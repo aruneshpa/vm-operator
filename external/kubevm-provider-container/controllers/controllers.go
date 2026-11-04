@@ -10,14 +10,14 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	kubevmcore "github.com/vmware-tanzu/vm-operator/external/kubevm/controller/controllers/virtualmachine"
+	kubevmcore "github.com/vm-api/vm-api/controller/controllers/virtualmachine"
 
 	"github.com/vmware-tanzu/vm-operator/external/kubevm-provider-container/controllers/containermachine"
 )
 
-// +kubebuilder:rbac:groups=kube-vm.io,resources=virtualmachines,verbs=get;list;watch;patch
-// +kubebuilder:rbac:groups=kube-vm.io,resources=virtualmachines/status,verbs=get;patch
-// +kubebuilder:rbac:groups=kube-vm.io,resources=virtualmachines/finalizers,verbs=update
+// +kubebuilder:rbac:groups=vm-api.io,resources=virtualmachines,verbs=get;list;watch;patch
+// +kubebuilder:rbac:groups=vm-api.io,resources=virtualmachines/status,verbs=get;patch
+// +kubebuilder:rbac:groups=vm-api.io,resources=virtualmachines/finalizers,verbs=update
 
 // AddToManager adds the ContainerMachine controller and the KubeVM core
 // controller to mgr.

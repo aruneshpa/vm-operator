@@ -5,7 +5,7 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - infrastructure.kube-vm.io
+  - infrastructure.vm-api.io
   resources:
   - containermachines
   verbs:
@@ -15,14 +15,14 @@ rules:
   - patch
   - watch
 - apiGroups:
-  - infrastructure.kube-vm.io
+  - infrastructure.vm-api.io
   resources:
   - containermachines/status
   verbs:
   - get
   - patch
 - apiGroups:
-  - kube-vm.io
+  - vm-api.io
   resources:
   - virtualmachines
   verbs:
@@ -31,13 +31,13 @@ rules:
   - patch
   - watch
 - apiGroups:
-  - kube-vm.io
+  - vm-api.io
   resources:
   - virtualmachines/finalizers
   verbs:
   - update
 - apiGroups:
-  - kube-vm.io
+  - vm-api.io
   resources:
   - virtualmachines/status
   verbs:

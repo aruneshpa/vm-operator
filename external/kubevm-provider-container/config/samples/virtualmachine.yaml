@@ -11,7 +11,7 @@
 # link, and nothing is adopted on half a link -- otherwise anyone who can
 # create a VirtualMachine could claim a container that is not theirs. The AWS
 # and vSphere providers work the same way.
-apiVersion: kube-vm.io/v1alpha1
+apiVersion: vm-api.io/v1alpha1
 kind: VirtualMachine
 metadata:
   name: web-01
@@ -31,21 +31,21 @@ spec:
         # which rejects the colon in "nginx:latest" and any "/" in a
         # registry path. An AMI id happens to fit that pattern; most OCI
         # image references do not. See docs/findings.md.
-        apiGroup: infrastructure.kube-vm.io
+        apiGroup: infrastructure.vm-api.io
         kind: ContainerImage
         name: nginx
   infrastructureRef:
-    apiGroup: infrastructure.kube-vm.io
+    apiGroup: infrastructure.vm-api.io
     kind: ContainerMachine
     name: web-01
 ---
-apiVersion: infrastructure.kube-vm.io/v1alpha1
+apiVersion: infrastructure.vm-api.io/v1alpha1
 kind: ContainerMachine
 metadata:
   name: web-01
   namespace: team-a
   annotations:
-    kube-vm.io/virtual-machine: web-01
+    vm-api.io/virtual-machine: web-01
 spec:
   # Runtime has no counterpart on VirtualMachineSpec, so it is the one field
   # set here directly instead of resolved from the parent. Set to docker to

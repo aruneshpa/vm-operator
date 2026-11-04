@@ -5,10 +5,10 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.21.0
   labels:
-    kube-vm.io/v1alpha1: v1alpha1
-  name: containermachines.infrastructure.kube-vm.io
+    vm-api.io/v1alpha1: v1alpha1
+  name: containermachines.infrastructure.vm-api.io
 spec:
-  group: infrastructure.kube-vm.io
+  group: infrastructure.vm-api.io
   names:
     categories:
     - kubevm
