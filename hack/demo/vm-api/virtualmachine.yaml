@@ -1,0 +1,43 @@
+# A machine, in the two objects a user writes. Same shape as the EC2 demo.
+#
+# The provider object's spec is EMPTY. Everything portable lives on the VM API
+# VirtualMachine; VM Operator fills the provider object's className, image,
+# storageClass and powerState from it when it is created.
+#
+# The vm-api.io/virtual-machine annotation on the provider object is its
+# consent to be claimed by the VirtualMachine it names.
+#
+# Before applying, pick an image:
+#   kubectl get clustervirtualmachineimages   # or: kubectl -n vm-api-ns get virtualmachineimages
+apiVersion: vm-api.io/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: web-01
+  namespace: vm-api-ns
+spec:
+  powerState: PoweredOn
+  instanceType:
+    # A VirtualMachineClass on vSphere (an instance type on EC2).
+    name: best-effort-small
+  bootDisk:
+    source:
+      image:
+        # Replace name with an image from the command above. On EC2 this is
+        # an AMI id; the generic shape is identical.
+        apiGroup: vmoperator.vmware.com
+        kind: ClusterVirtualMachineImage
+        name: vmi-REPLACE-ME
+    storageClassName: wcpglobal-storage-profile
+  infrastructureRef:
+    apiGroup: vmoperator.vmware.com
+    kind: VirtualMachine
+    name: web-01
+---
+apiVersion: vmoperator.vmware.com/v1alpha6
+kind: VirtualMachine
+metadata:
+  name: web-01
+  namespace: vm-api-ns
+  annotations:
+    vm-api.io/virtual-machine: web-01
+spec: {}
