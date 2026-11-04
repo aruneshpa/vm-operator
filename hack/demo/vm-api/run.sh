@@ -37,7 +37,10 @@ done
 
 LOCAL_YAML=artifacts/local-deployment.yaml
 VM_API_CRD='virtualmachines.vm-api.io'
-CRD_PATTERNS="${VM_API_CRD},*.vmoperator.vmware.com"
+# Only the CRDs the demo needs. Re-applying every vmoperator CRD can fail on
+# CRDs the Supervisor customizes (e.g. conversion webhook config on
+# virtualmachinesnapshots). Override with CRD_PATTERNS=... if needed.
+CRD_PATTERNS="${CRD_PATTERNS:-${VM_API_CRD},virtualmachines.vmoperator.vmware.com}"
 IMAGE_TAR=artifacts/vmoperator-controller-linux_amd64.tar
 
 echo ">> Generating manifests and rendering ${LOCAL_YAML}"
