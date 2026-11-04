@@ -5,7 +5,7 @@ set -o nounset
 set -o pipefail
 
 USAGE="
-Usage: ${0} [[-s SV_IP,SV_IP,SV_IP [-S SV_PASSWORD]] | [-v VC_IP [-V VC_SSH_PASSWORD]] | [-T testbedInfo.json]] [-c cluster] [-C CRDs] [image.tar]
+Usage: ${0} [[-s SV_IP,SV_IP,SV_IP [-S SV_PASSWORD]] | [-v VC_IP [-V VC_SSH_PASSWORD]] | [-T testbedInfo.json]] [-c cluster] [-C CRDs] [-E] [image.tar]
 
 Loads the VM Operator container image to the Supervisor control plane VMs,
 and restarts the deployments. The Supervisor control plane VM credential
@@ -48,6 +48,9 @@ FLAGS:
   -C Deploy CRDs matching glob pattern (e.g. '*.vmoperator.vmware.com')
      Supports comma-separated patterns and glob wildcards (* and ?).
      Also re-applies the VM Operator manager and VM API editor ClusterRoles.
+  -E Enable the VM API integration by setting
+     FSS_WCP_VMSERVICE_KUBEVM_PROVIDER=true on the vmop controller-manager
+     deployment (this rolls the Pods).
   -k Path, on the Supervisor CP node, to the admin kubeconfig used to apply
      CRDs (default: /etc/kubernetes/admin.conf). This is the same kubeconfig
      'kubectl-sudo' switches to after its interactive confirmation prompt;
@@ -75,6 +78,7 @@ TESTBED_INFO=
 SV_CLUSTER=
 
 DEPLOY_CRD_PATTERN=
+ENABLE_VM_API=false
 LOCAL_DEPLOYMENT_YAML="artifacts/local-deployment.yaml"
 
 # Admin kubeconfig on the Supervisor CP node, needed to apply CRDs. This is
@@ -293,6 +297,18 @@ function sv_update_deployment_image() {
     sv_cp_ssh_cmd "$ip" "$cmd"
 }
 
+# The vm-api.io integration (webhook delegation, link controller and the
+# in-process VM API core controller) is gated by this FSS. WCP renders the
+# vmop deployment from its own FSS list, so set it on the live deployment;
+# `kubectl set env` rolls the Pods.
+function sv_enable_vm_api() {
+    local ip
+
+    ip=${SV_VIP:-${SV_IPS[0]}}
+
+    sv_cp_ssh_cmd "$ip" "kubectl set env -n vmware-system-vmop deployment/vmware-system-vmop-controller-manager FSS_WCP_VMSERVICE_KUBEVM_PROVIDER=true"
+}
+
 function sv_restart_vmop_deployment() {
     local ip
 
@@ -304,7 +320,7 @@ function sv_restart_vmop_deployment() {
 
 #########################################
 
-while getopts ":hc:s:S:v:V:T:C:k:" opt ; do
+while getopts ":hEc:s:S:v:V:T:C:k:" opt ; do
     case $opt in
         h)
             echo "$USAGE"
@@ -334,6 +350,9 @@ while getopts ":hc:s:S:v:V:T:C:k:" opt ; do
         k)
             SV_ADMIN_KUBECONFIG=$OPTARG
             ;;
+        E)
+            ENABLE_VM_API=true
+            ;;
         *)
             fatal "$USAGE"
             ;;
@@ -360,8 +379,8 @@ elif [[ $# -gt 1 ]] ; then
     fatal "$USAGE"
 fi
 
-if [[ -z $IMAGE && -z $DEPLOY_CRD_PATTERN ]] ; then
-    fatal "Either image.tar or -C pattern is required"
+if [[ -z $IMAGE && -z $DEPLOY_CRD_PATTERN && $ENABLE_VM_API != true ]] ; then
+    fatal "Either image.tar, -C pattern, or -E is required"
 fi
 
 if [[ -z $SV_IPS_CSL ]] ; then
@@ -404,6 +423,10 @@ if [[ -n $IMAGE ]] ; then
 
     sv_update_deployment_image "$IMAGE_REF"
     sv_restart_vmop_deployment
+fi
+
+if [[ $ENABLE_VM_API == true ]] ; then
+    sv_enable_vm_api
 fi
 
 # vim: tabstop=4 shiftwidth=4 expandtab softtabstop=4 filetype=sh
