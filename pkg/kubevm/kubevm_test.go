@@ -327,3 +327,58 @@ var _ = Describe("ApplyDelegatedNetwork", func() {
 		Expect(kubevm.ApplyDelegatedNetwork(vm, generic, mapper)).ToNot(Succeed())
 	})
 })
+
+var _ = Describe("SyncInterfaces", func() {
+	var (
+		vm      *vmopv1.VirtualMachine
+		generic *kubevmv1a1.VirtualMachine
+		mapper  meta.RESTMapper
+	)
+
+	BeforeEach(func() {
+		vm = newProviderVM(genericName)
+		generic = newGenericVM(providerName)
+		generic.Spec.Network = &kubevmv1a1.NetworkSpec{
+			Interfaces: []kubevmv1a1.NetworkInterfaceSpec{
+				{Name: "eth0", DHCP4: ptr.To(true)},
+				{Name: "eth1", DHCP4: ptr.To(true)},
+			},
+		}
+		mapper = meta.NewDefaultRESTMapper(nil)
+	})
+
+	It("adds a missing interface and keeps provider-only fields", func() {
+		vm.Spec.Network = &vmopv1.VirtualMachineNetworkSpec{
+			Interfaces: []vmopv1.VirtualMachineNetworkInterfaceSpec{
+				{Name: "eth0", MACAddr: "00:50:56:00:00:01"},
+			},
+		}
+		Expect(kubevm.SyncInterfaces(vm, generic, mapper)).To(Succeed())
+		Expect(vm.Spec.Network.Interfaces).To(HaveLen(2))
+		Expect(vm.Spec.Network.Interfaces[0].Name).To(Equal("eth0"))
+		Expect(vm.Spec.Network.Interfaces[0].MACAddr).To(Equal("00:50:56:00:00:01"))
+		Expect(vm.Spec.Network.Interfaces[0].DHCP4).To(Equal(ptr.To(true)))
+		Expect(vm.Spec.Network.Interfaces[1].Name).To(Equal("eth1"))
+	})
+
+	It("removes an interface that is no longer on the generic object", func() {
+		vm.Spec.Network = &vmopv1.VirtualMachineNetworkSpec{
+			Interfaces: []vmopv1.VirtualMachineNetworkInterfaceSpec{
+				{Name: "eth0"}, {Name: "eth1"}, {Name: "gone"},
+			},
+		}
+		Expect(kubevm.SyncInterfaces(vm, generic, mapper)).To(Succeed())
+		Expect(vm.Spec.Network.Interfaces).To(HaveLen(2))
+		Expect(vm.Spec.Network.Interfaces[0].Name).To(Equal("eth0"))
+		Expect(vm.Spec.Network.Interfaces[1].Name).To(Equal("eth1"))
+	})
+
+	It("leaves the provider alone when the generic object lists no interfaces", func() {
+		generic.Spec.Network.Interfaces = nil
+		vm.Spec.Network = &vmopv1.VirtualMachineNetworkSpec{
+			Interfaces: []vmopv1.VirtualMachineNetworkInterfaceSpec{{Name: "eth0"}},
+		}
+		Expect(kubevm.SyncInterfaces(vm, generic, mapper)).To(Succeed())
+		Expect(vm.Spec.Network.Interfaces).To(HaveLen(1))
+	})
+})

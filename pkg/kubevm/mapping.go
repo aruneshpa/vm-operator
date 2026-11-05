@@ -52,7 +52,7 @@ func ApplyDelegatedFields(vm *vmopv1.VirtualMachine, generic *kubevmv1a1.Virtual
 
 // ApplyDelegatedNetwork copies the generic object's network configuration
 // onto the provider object at create time: spec.network.interfaces (name,
-// network reference, dhcp4, dhcp6), spec.network.nameservers and
+// network reference, dhcp4, dhcp6; see SyncInterfaces), spec.network.nameservers and
 // spec.network.searchDomains. Each is filled only when currently empty, so a
 // value the user set directly on the provider object is never overwritten.
 //
@@ -75,29 +75,8 @@ func ApplyDelegatedNetwork(
 	}
 
 	if len(vm.Spec.Network.Interfaces) == 0 {
-		for _, gi := range n.Interfaces {
-			i := vmopv1.VirtualMachineNetworkInterfaceSpec{
-				Name:  gi.Name,
-				DHCP4: gi.DHCP4,
-				DHCP6: gi.DHCP6,
-			}
-			if ref := gi.Network; ref != nil {
-				mapping, err := mapper.RESTMapping(
-					schema.GroupKind{Group: ref.APIGroup, Kind: ref.Kind})
-				if err != nil {
-					return fmt.Errorf(
-						"failed to resolve network %s/%s %q of interface %q: %w",
-						ref.APIGroup, ref.Kind, ref.Name, gi.Name, err)
-				}
-				i.Network = &vmopv1common.PartialObjectRef{
-					TypeMeta: metav1.TypeMeta{
-						APIVersion: mapping.GroupVersionKind.GroupVersion().String(),
-						Kind:       ref.Kind,
-					},
-					Name: ref.Name,
-				}
-			}
-			vm.Spec.Network.Interfaces = append(vm.Spec.Network.Interfaces, i)
+		if err := SyncInterfaces(vm, generic, mapper); err != nil {
+			return err
 		}
 	}
 
@@ -107,6 +86,81 @@ func ApplyDelegatedNetwork(
 	if len(vm.Spec.Network.SearchDomains) == 0 {
 		vm.Spec.Network.SearchDomains = append([]string(nil), n.SearchDomains...)
 	}
+
+	return nil
+}
+
+// SyncInterfaces makes the provider object's spec.network.interfaces match the
+// generic object's, keyed on the interface name: an interface that exists on
+// both has its network reference, dhcp4 and dhcp6 set from the generic object
+// (leaving the provider-only fields such as macAddr and guestDeviceName alone),
+// an interface only on the generic object is added, and an interface only on
+// the provider object is removed. Providers keep their existing order; added
+// interfaces are appended in the generic object's order.
+//
+// It does nothing when the generic object lists no interfaces, since then it
+// has no opinion and the provider's default interface is left alone.
+func SyncInterfaces(
+	vm *vmopv1.VirtualMachine,
+	generic *kubevmv1a1.VirtualMachine,
+	mapper meta.RESTMapper) error {
+
+	n := generic.Spec.Network
+	if n == nil || len(n.Interfaces) == 0 {
+		return nil
+	}
+
+	desired := make(map[string]vmopv1.VirtualMachineNetworkInterfaceSpec, len(n.Interfaces))
+	for _, gi := range n.Interfaces {
+		i := vmopv1.VirtualMachineNetworkInterfaceSpec{
+			Name:  gi.Name,
+			DHCP4: gi.DHCP4,
+			DHCP6: gi.DHCP6,
+		}
+		if ref := gi.Network; ref != nil {
+			mapping, err := mapper.RESTMapping(
+				schema.GroupKind{Group: ref.APIGroup, Kind: ref.Kind})
+			if err != nil {
+				return fmt.Errorf(
+					"failed to resolve network %s/%s %q of interface %q: %w",
+					ref.APIGroup, ref.Kind, ref.Name, gi.Name, err)
+			}
+			i.Network = &vmopv1common.PartialObjectRef{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: mapping.GroupVersionKind.GroupVersion().String(),
+					Kind:       ref.Kind,
+				},
+				Name: ref.Name,
+			}
+		}
+		desired[gi.Name] = i
+	}
+
+	if vm.Spec.Network == nil {
+		vm.Spec.Network = &vmopv1.VirtualMachineNetworkSpec{}
+	}
+
+	var out []vmopv1.VirtualMachineNetworkInterfaceSpec
+	seen := make(map[string]struct{}, len(desired))
+	for _, cur := range vm.Spec.Network.Interfaces {
+		want, ok := desired[cur.Name]
+		if !ok {
+			continue // Only on the provider object: removed.
+		}
+		seen[cur.Name] = struct{}{}
+		if want.Network != nil {
+			cur.Network = want.Network
+		}
+		cur.DHCP4 = want.DHCP4
+		cur.DHCP6 = want.DHCP6
+		out = append(out, cur)
+	}
+	for _, gi := range n.Interfaces {
+		if _, ok := seen[gi.Name]; !ok {
+			out = append(out, desired[gi.Name])
+		}
+	}
+	vm.Spec.Network.Interfaces = out
 
 	return nil
 }

@@ -118,7 +118,7 @@ type Reconciler struct {
 // +kubebuilder:rbac:groups=vmoperator.vmware.com,resources=virtualmachines/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=vm-api.io,resources=virtualmachines,verbs=list;watch
 
-// Reconcile reasserts the delegated spec.powerState field from the owning
+// Reconcile reasserts the delegated spec.powerState field and spec.network.interfaces from the owning
 // vm-api.io VirtualMachine onto the provider object, and sets the UpToDate
 // condition false when a delegated field that is immutable after create no
 // longer matches what the generic object requests.
@@ -198,6 +198,14 @@ func (r *Reconciler) reconcileNormal(
 	desiredPowerState := kubevm.PowerStateFor(generic.Spec.PowerState)
 	if desiredPowerState != "" && vm.Spec.PowerState != desiredPowerState {
 		vm.Spec.PowerState = desiredPowerState
+	}
+
+	// Interfaces are kept in sync after create, keyed on name, but only when
+	// the network can be changed on an existing VM.
+	if pkgcfg.FromContext(ctx).Features.MutableNetworks {
+		if err := kubevm.SyncInterfaces(vm, generic, r.Client.RESTMapper()); err != nil {
+			return err
+		}
 	}
 
 	if kubevm.DelegatedFieldsUpToDate(vm, generic) {
