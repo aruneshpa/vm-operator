@@ -61,7 +61,7 @@ if [[ -n $DEPLOY_ARGS ]]; then
     args=()
     # shellcheck disable=SC2206
     args+=($DEPLOY_ARGS)
-    args+=(-C "${CRD_PATTERNS}" -E)
+    args+=(-C "${CRD_PATTERNS}")
     if [[ $BUILD_IMAGE == true ]]; then args+=("${IMAGE_TAR}"); fi
     echo ">> hack/deploy-wcp.sh ${args[*]}"
     ./hack/deploy-wcp.sh "${args[@]}"
@@ -70,6 +70,6 @@ else
 
 Done. To install the CRDs/RBAC on a Supervisor:
   hack/deploy-wcp.sh <-v VC_IP | -s SV_IPS | -T testbedInfo.json> -C '${CRD_PATTERNS}' [image.tar]
-Add -E to also enable FSS_WCP_VMSERVICE_KUBEVM_PROVIDER on the vmop deployment.
+deploy-wcp.sh also sets FSS_WCP_VMSERVICE_KUBEVM_PROVIDER=true on the vmop deployment.
 MSG
 fi

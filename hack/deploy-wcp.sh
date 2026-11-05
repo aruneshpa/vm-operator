@@ -5,7 +5,7 @@ set -o nounset
 set -o pipefail
 
 USAGE="
-Usage: ${0} [[-s SV_IP,SV_IP,SV_IP [-S SV_PASSWORD]] | [-v VC_IP [-V VC_SSH_PASSWORD]] | [-T testbedInfo.json]] [-c cluster] [-C CRDs] [-E] [image.tar]
+Usage: ${0} [[-s SV_IP,SV_IP,SV_IP [-S SV_PASSWORD]] | [-v VC_IP [-V VC_SSH_PASSWORD]] | [-T testbedInfo.json]] [-c cluster] [-C CRDs] [-N] [image.tar]
 
 Loads the VM Operator container image to the Supervisor control plane VMs,
 and restarts the deployments. The Supervisor control plane VM credential
@@ -48,9 +48,9 @@ FLAGS:
   -C Deploy CRDs matching glob pattern (e.g. '*.vmoperator.vmware.com')
      Supports comma-separated patterns and glob wildcards (* and ?).
      Also re-applies the VM Operator manager and VM API editor ClusterRoles.
-  -E Enable the VM API integration by setting
-     FSS_WCP_VMSERVICE_KUBEVM_PROVIDER=true on the vmop controller-manager
-     deployment (this rolls the Pods).
+  -N Do not set FSS_WCP_VMSERVICE_KUBEVM_PROVIDER=true on the vmop
+     controller-manager deployment. By default it is set on every run, which
+     enables the VM API integration (and rolls the Pods if it was not set).
   -k Path, on the Supervisor CP node, to the admin kubeconfig used to apply
      CRDs (default: /etc/kubernetes/admin.conf). This is the same kubeconfig
      'kubectl-sudo' switches to after its interactive confirmation prompt;
@@ -78,7 +78,7 @@ TESTBED_INFO=
 SV_CLUSTER=
 
 DEPLOY_CRD_PATTERN=
-ENABLE_VM_API=false
+ENABLE_VM_API=true
 LOCAL_DEPLOYMENT_YAML="artifacts/local-deployment.yaml"
 
 # Admin kubeconfig on the Supervisor CP node, needed to apply CRDs. This is
@@ -320,7 +320,7 @@ function sv_restart_vmop_deployment() {
 
 #########################################
 
-while getopts ":hEc:s:S:v:V:T:C:k:" opt ; do
+while getopts ":hNc:s:S:v:V:T:C:k:" opt ; do
     case $opt in
         h)
             echo "$USAGE"
@@ -350,8 +350,8 @@ while getopts ":hEc:s:S:v:V:T:C:k:" opt ; do
         k)
             SV_ADMIN_KUBECONFIG=$OPTARG
             ;;
-        E)
-            ENABLE_VM_API=true
+        N)
+            ENABLE_VM_API=false
             ;;
         *)
             fatal "$USAGE"
@@ -379,8 +379,8 @@ elif [[ $# -gt 1 ]] ; then
     fatal "$USAGE"
 fi
 
-if [[ -z $IMAGE && -z $DEPLOY_CRD_PATTERN && $ENABLE_VM_API != true ]] ; then
-    fatal "Either image.tar, -C pattern, or -E is required"
+if [[ -z $IMAGE && -z $DEPLOY_CRD_PATTERN ]] ; then
+    fatal "Either image.tar or -C pattern is required"
 fi
 
 if [[ -z $SV_IPS_CSL ]] ; then
