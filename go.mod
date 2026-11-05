@@ -3,6 +3,9 @@ module github.com/vmware-tanzu/vm-operator
 go 1.26.7
 
 replace (
+	// DEMO ONLY: unpushed vm-api change; replace with a pseudo-version once pushed.
+	github.com/vm-api/vm-api => ../vm-api
+	github.com/vm-api/vm-api/controller => ../vm-api/controller
 	github.com/vmware-tanzu/vm-operator/api => ./api
 	github.com/vmware-tanzu/vm-operator/external/appplatform => ./external/appplatform
 	github.com/vmware-tanzu/vm-operator/external/byok => ./external/byok
