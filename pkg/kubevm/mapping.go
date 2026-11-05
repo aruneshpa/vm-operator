@@ -5,9 +5,16 @@
 package kubevm
 
 import (
+	"fmt"
+
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	kubevmv1a1 "github.com/vm-api/vm-api/api/v1alpha1"
 
 	vmopv1 "github.com/vmware-tanzu/vm-operator/api/v1alpha6"
+	vmopv1common "github.com/vmware-tanzu/vm-operator/api/v1alpha6/common"
 )
 
 // ApplyDelegatedFields copies the generic object's four delegated spec
@@ -41,6 +48,67 @@ func ApplyDelegatedFields(vm *vmopv1.VirtualMachine, generic *kubevmv1a1.Virtual
 	if vm.Spec.PowerState == "" {
 		vm.Spec.PowerState = PowerStateFor(spec.PowerState)
 	}
+}
+
+// ApplyDelegatedNetwork copies the generic object's network configuration
+// onto the provider object at create time: spec.network.interfaces (name,
+// network reference, dhcp4, dhcp6), spec.network.nameservers and
+// spec.network.searchDomains. Each is filled only when currently empty, so a
+// value the user set directly on the provider object is never overwritten.
+//
+// A generic network reference names its group and kind but no version, so the
+// version is resolved with the given RESTMapper. Interface addresses and
+// publicIP are not mapped: VM Operator addresses require a prefix length, which
+// the generic API deliberately omits, and publicIP has no vSphere equivalent.
+func ApplyDelegatedNetwork(
+	vm *vmopv1.VirtualMachine,
+	generic *kubevmv1a1.VirtualMachine,
+	mapper meta.RESTMapper) error {
+
+	n := generic.Spec.Network
+	if n == nil {
+		return nil
+	}
+
+	if vm.Spec.Network == nil {
+		vm.Spec.Network = &vmopv1.VirtualMachineNetworkSpec{}
+	}
+
+	if len(vm.Spec.Network.Interfaces) == 0 {
+		for _, gi := range n.Interfaces {
+			i := vmopv1.VirtualMachineNetworkInterfaceSpec{
+				Name:  gi.Name,
+				DHCP4: gi.DHCP4,
+				DHCP6: gi.DHCP6,
+			}
+			if ref := gi.Network; ref != nil {
+				mapping, err := mapper.RESTMapping(
+					schema.GroupKind{Group: ref.APIGroup, Kind: ref.Kind})
+				if err != nil {
+					return fmt.Errorf(
+						"failed to resolve network %s/%s %q of interface %q: %w",
+						ref.APIGroup, ref.Kind, ref.Name, gi.Name, err)
+				}
+				i.Network = &vmopv1common.PartialObjectRef{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: mapping.GroupVersionKind.GroupVersion().String(),
+						Kind:       ref.Kind,
+					},
+					Name: ref.Name,
+				}
+			}
+			vm.Spec.Network.Interfaces = append(vm.Spec.Network.Interfaces, i)
+		}
+	}
+
+	if len(vm.Spec.Network.Nameservers) == 0 {
+		vm.Spec.Network.Nameservers = append([]string(nil), n.Nameservers...)
+	}
+	if len(vm.Spec.Network.SearchDomains) == 0 {
+		vm.Spec.Network.SearchDomains = append([]string(nil), n.SearchDomains...)
+	}
+
+	return nil
 }
 
 // PowerStateFor down-maps the generic object's desired power state onto

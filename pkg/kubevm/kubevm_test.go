@@ -8,7 +8,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 
 	kubevmv1a1 "github.com/vm-api/vm-api/api/v1alpha1"
@@ -246,5 +248,82 @@ var _ = Describe("DelegatedFieldsUpToDate", func() {
 	It("returns false when the storage class diverges", func() {
 		generic.Spec.BootDisk.StorageClassName = "some-other-storage-class"
 		Expect(kubevm.DelegatedFieldsUpToDate(vm, generic)).To(BeFalse())
+	})
+})
+
+var _ = Describe("ApplyDelegatedNetwork", func() {
+	var (
+		vm      *vmopv1.VirtualMachine
+		generic *kubevmv1a1.VirtualMachine
+		mapper  meta.RESTMapper
+	)
+
+	BeforeEach(func() {
+		vm = newProviderVM(genericName)
+		generic = newGenericVM(providerName)
+		generic.Spec.Network = &kubevmv1a1.NetworkSpec{
+			Nameservers:   []string{"10.0.0.1"},
+			SearchDomains: []string{"example.com"},
+			Interfaces: []kubevmv1a1.NetworkInterfaceSpec{
+				{
+					Name: "eth0",
+					Network: &kubevmv1a1.ObjectReference{
+						APIGroup: "netoperator.vmware.com",
+						Kind:     "Network",
+						Name:     "primary",
+					},
+					DHCP4: ptr.To(true),
+				},
+				{Name: "eth1"},
+			},
+		}
+
+		m := meta.NewDefaultRESTMapper([]schema.GroupVersion{
+			{Group: "netoperator.vmware.com", Version: "v1alpha1"},
+		})
+		m.Add(schema.GroupVersionKind{
+			Group: "netoperator.vmware.com", Version: "v1alpha1", Kind: "Network",
+		}, meta.RESTScopeNamespace)
+		mapper = m
+	})
+
+	It("maps interfaces, nameservers and search domains", func() {
+		Expect(kubevm.ApplyDelegatedNetwork(vm, generic, mapper)).To(Succeed())
+
+		Expect(vm.Spec.Network).ToNot(BeNil())
+		Expect(vm.Spec.Network.Nameservers).To(Equal([]string{"10.0.0.1"}))
+		Expect(vm.Spec.Network.SearchDomains).To(Equal([]string{"example.com"}))
+		Expect(vm.Spec.Network.Interfaces).To(HaveLen(2))
+
+		i0 := vm.Spec.Network.Interfaces[0]
+		Expect(i0.Name).To(Equal("eth0"))
+		Expect(i0.DHCP4).To(Equal(ptr.To(true)))
+		Expect(i0.Network).ToNot(BeNil())
+		Expect(i0.Network.APIVersion).To(Equal("netoperator.vmware.com/v1alpha1"))
+		Expect(i0.Network.Kind).To(Equal("Network"))
+		Expect(i0.Network.Name).To(Equal("primary"))
+
+		Expect(vm.Spec.Network.Interfaces[1].Name).To(Equal("eth1"))
+		Expect(vm.Spec.Network.Interfaces[1].Network).To(BeNil())
+	})
+
+	It("does nothing when the generic object has no network", func() {
+		generic.Spec.Network = nil
+		Expect(kubevm.ApplyDelegatedNetwork(vm, generic, mapper)).To(Succeed())
+		Expect(vm.Spec.Network).To(BeNil())
+	})
+
+	It("does not overwrite interfaces already set on the provider", func() {
+		vm.Spec.Network = &vmopv1.VirtualMachineNetworkSpec{
+			Interfaces: []vmopv1.VirtualMachineNetworkInterfaceSpec{{Name: "mine"}},
+		}
+		Expect(kubevm.ApplyDelegatedNetwork(vm, generic, mapper)).To(Succeed())
+		Expect(vm.Spec.Network.Interfaces).To(HaveLen(1))
+		Expect(vm.Spec.Network.Interfaces[0].Name).To(Equal("mine"))
+	})
+
+	It("returns an error when a network kind cannot be resolved", func() {
+		generic.Spec.Network.Interfaces[0].Network.Kind = "Nope"
+		Expect(kubevm.ApplyDelegatedNetwork(vm, generic, mapper)).ToNot(Succeed())
 	})
 })

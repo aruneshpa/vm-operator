@@ -27,8 +27,8 @@ import (
 // gate is on and the annotation is present. When both hold, it Gets the
 // named generic object, refuses the request when that object's
 // spec.infrastructureRef does not name this VM in this namespace, and
-// otherwise fills spec.className, spec.image, spec.storageClass and
-// spec.powerState from the generic object, only where the field is
+// otherwise fills spec.className, spec.image, spec.storageClass,
+// spec.powerState and spec.network from the generic object, only where the field is
 // currently empty, so a value the user set explicitly is never overwritten.
 func ResolveKubeVMParentOnCreate(
 	ctx *pkgctx.WebhookRequestContext,
@@ -67,6 +67,9 @@ func ResolveKubeVMParentOnCreate(
 	}
 
 	kubevm.ApplyDelegatedFields(vm, generic)
+	if err := kubevm.ApplyDelegatedNetwork(vm, generic, client.RESTMapper()); err != nil {
+		return false, err
+	}
 
 	return true, nil
 }
